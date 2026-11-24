@@ -1,0 +1,2 @@
+# Synthetic demonstration package. Do not install it.
+sentinel-demo-library==1.5

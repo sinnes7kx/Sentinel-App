@@ -1,0 +1,16 @@
+[
+  {
+    "schema_version": "1.7.0",
+    "id": "x_SENTINEL-DEMO-1",
+    "modified": "2026-11-24T00:00:00Z",
+    "summary": "Synthetic test advisory; not a real vulnerability",
+    "affected": [
+      {
+        "package": {"name": "sentinel-demo-library", "ecosystem": "PyPI"},
+        "ranges": [
+          {"type": "ECOSYSTEM", "events": [{"introduced": "1.0"}, {"fixed": "2.0"}]}
+        ]
+      }
+    ]
+  }
+]
