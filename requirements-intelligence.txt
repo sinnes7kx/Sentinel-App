@@ -1,0 +1,2 @@
+# Optional: needed only for local dependency assessment, not web/DNS assessment.
+packaging==26.4

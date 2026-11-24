@@ -26,6 +26,7 @@ class App(tk.Tk):
         tk.Label(header,text='SENTINEL',font=('Segoe UI',24,'bold'),bg='#101923',fg='#6de0c0').pack(side='left')
         tk.Label(header,text='  /  SECURITY ASSESSMENT    v0.2 COMMUNITY',bg='#101923',fg='#a7bacb',font=('Segoe UI',10)).pack(side='left')
         ttk.Button(header,text='Security tools…',command=self.open_network).pack(side='right')
+        ttk.Button(header,text='Local dependencies',command=self.open_dependencies).pack(side='right',padx=8)
         main=ttk.Frame(self,padding=16); main.pack(fill='both',expand=True,padx=24,pady=(0,12))
         form=ttk.Frame(main); form.pack(fill='x')
         ttk.Label(form,text='Project').grid(row=0,column=0,sticky='w'); ttk.Label(form,text='Authorized URL (one page)').grid(row=0,column=1,sticky='w',padx=12)
@@ -54,6 +55,9 @@ class App(tk.Tk):
     def open_network(self):
         from .tools_window import ToolsWindow
         ToolsWindow(self)
+    def open_dependencies(self):
+        from .dependency_window import DependencyWindow
+        DependencyWindow(self)
     def set_detail(self,text):
         self.detail.configure(state='normal'); self.detail.delete('1.0','end'); self.detail.insert('1.0',text); self.detail.configure(state='disabled')
     def run(self):
