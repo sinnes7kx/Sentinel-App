@@ -43,6 +43,9 @@ class ApplicationTests(unittest.TestCase):
                     self.assertIs(tools.orchestrator, app.orchestrator)
                     tools.auth.set(True); tools.target.set('127.0.0.1')
                     self.assertFalse(tools.auth.get())
+                    timer = tools.poll_timer
+                    tools.destroy()
+                    self.assertNotIn(timer, app.tk.call('after', 'info'))
                     app.url.set(f'http://127.0.0.1:{server.server_port}/')
                     app.auth.set(True); app.run()
                     deadline = time.monotonic() + 6

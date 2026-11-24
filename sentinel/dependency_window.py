@@ -4,6 +4,7 @@ from pathlib import Path
 from queue import Queue, Empty
 from threading import Event
 from .orchestration import for_app
+from .ui_lifecycle import watch_poll
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from .dependencies import assess
@@ -12,6 +13,7 @@ from .dependencies import assess
 class DependencyWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
+        watch_poll(self)
         self.title('Sentinel | Local dependency check')
         self.geometry('880x650')
         self.orchestrator = for_app(app)
@@ -54,7 +56,7 @@ class DependencyWindow(tk.Toplevel):
         self.detail = tk.Text(body, height=9, wrap='word')
         self.detail.pack(fill='both', expand=True, pady=8)
         self.say('Affected: an advisory matches this version.\nNo match in supplied feed: only these records were checked.\nUnknown: more information is needed.\n\nA result is not proof of exploitability or overall safety. Feed freshness is not verified.')
-        self.after(100, self.poll)
+        self.poll_timer = self.after(100, self.poll)
 
     def choose(self, variable):
         path = filedialog.askopenfilename(parent=self)
@@ -119,7 +121,7 @@ class DependencyWindow(tk.Toplevel):
         except Exception as exc:
             self.status.set('Local history/UI error: ' + type(exc).__name__ + '. You can still export the result.')
         if self.winfo_exists():
-            self.after(100, self.poll)
+            self.poll_timer = self.after(100, self.poll)
 
     def selected(self, event=None):
         selection = self.tree.selection()

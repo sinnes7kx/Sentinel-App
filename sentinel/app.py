@@ -1,3 +1,4 @@
+from .ui_lifecycle import watch_poll
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from threading import Event
@@ -13,6 +14,7 @@ from .report import html_report
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        watch_poll(self)
         self.title('Sentinel | Security assessment • v0.5'); self.geometry('1100x740'); self.minsize(850,650)
         self.orchestrator = for_app(self)
         self.configure(bg='#101923'); self.store=Store(); self.queue=Queue(); self.current=None; self.records=[]; self.busy=False; self.cancel_event=Event()
@@ -53,7 +55,7 @@ class App(tk.Tk):
         self.findings=ttk.Treeview(right,columns=('severity','title'),show='headings',height=8); self.findings.heading('severity',text='Severity'); self.findings.heading('title',text='Finding'); self.findings.column('severity',width=80,stretch=False); self.findings.column('title',width=400); self.findings.pack(fill='both',expand=True); self.findings.bind('<<TreeviewSelect>>',self.finding_selected)
         self.detail=tk.Text(right,height=10,wrap='word',bg='#101923',fg='#d9e5ed',relief='flat',font=('Segoe UI',10),padx=10,pady=10); self.detail.pack(fill='both',expand=True,pady=(8,0)); self.set_detail('Select a finding to see evidence and remediation. A clean assessment is not proof of security.')
         tk.Label(self,textvariable=self.status,bg='#101923',fg='#9fc2d4',anchor='w').pack(fill='x',padx=24,pady=(0,14))
-        self.after(100,self.poll)
+        self.poll_timer = self.after(100,self.poll)
     def open_network(self):
         from .tools_window import ToolsWindow
         ToolsWindow(self)
@@ -89,7 +91,7 @@ class App(tk.Tk):
                 sid=self.store.save(pid,result); self.project.set(name); self.project_box.configure(values=self.store.projects()); self.load_history(sid); self.status.set('Assessment '+result['status']+' • Saved locally.')
         except Empty:pass
         except Exception as e:self.status.set('Local storage/UI error: '+type(e).__name__)
-        self.after(100,self.poll)
+        self.poll_timer = self.after(100,self.poll)
     def load_history(self,select_id=None):
         if self.busy:return
         try:pid=self.store.project(self.project.get())

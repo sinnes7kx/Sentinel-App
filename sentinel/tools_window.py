@@ -1,4 +1,5 @@
 """Beginner window for every integrated security tool."""
+from .ui_lifecycle import watch_poll
 import tkinter as tk
 from tkinter import ttk, messagebox
 from threading import Event
@@ -17,6 +18,7 @@ LABELS = {'net': 'Target: an IP address, a host name, or a home/office network s
 class ToolsWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
+        watch_poll(self)
         self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
         self.title('Sentinel | Security tools'); self.geometry('940x720'); self.minsize(780, 600); self.configure(bg='#101923')
@@ -56,7 +58,7 @@ class ToolsWindow(tk.Toplevel):
         self.profile.trace_add('write', lambda *_: self.auth.set(False))
         self.backend.trace_add('write', lambda *_: self.auth.set(False))
         self.environment.trace_add('write', lambda *_: self.auth.set(False))
-        self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.after(150, self.poll)
+        self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
 
     def say(self, text):
         self.detail.configure(state='normal'); self.detail.delete('1.0', 'end'); self.detail.insert('1.0', text); self.detail.configure(state='disabled')
@@ -121,7 +123,7 @@ class ToolsWindow(tk.Toplevel):
                 self.app.project.set(name); self.app.load_history(sid)
         except Empty: pass
         except Exception as e: self.status.set('Error: ' + type(e).__name__)
-        if self.winfo_exists(): self.after(150, self.poll)
+        if self.winfo_exists(): self.poll_timer = self.after(150, self.poll)
 
     def selected(self, _=None):
         s = self.tree.selection()
