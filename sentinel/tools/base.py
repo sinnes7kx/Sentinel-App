@@ -5,7 +5,7 @@ does the shared, safety-critical work in one place: parse the target, enforce
 scope and authorization, locate the binary, run with limits, parse untrusted
 output, and return an ordinary sentinel.engine.Scan.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Callable
 import os
@@ -15,6 +15,7 @@ import tempfile
 from ..engine import Scan, Target
 from . import runner
 from .scope import parse_net_target, require_authorization
+from .backends import Backend
 
 
 class ToolMissing(RuntimeError):
@@ -80,17 +81,40 @@ def parse_scope(spec, value, resolver=None):
 
 
 def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=None,
-            resolver=None, run=runner.run, binary=None):
+            resolver=None, run=runner.run, binary=None, backend=None):
     if profile not in spec.profiles:
         raise ValueError('Unknown scan profile.')
+    if attested is not True:
+        raise PermissionError('Confirm ownership or written permission before testing.')
+    if cancel is not None and cancel.is_set():
+        return Scan(str(value), datetime.now(timezone.utc).isoformat(), 'cancelled', None, None, [],
+                    'Cancelled before resolution.', profile=f'{spec.id}-{profile}')
     target, scope, label = parse_scope(spec, value, resolver)
     require_authorization(scope, attested, typed_confirmation)
-    binary = binary or find_binary(spec)
+    if spec.kind == 'net' and scope.kind == 'host':
+        target = replace(scope, value=scope.addresses[0], kind='ip')
+    backend = backend or Backend()
+    backend.validate(spec.id)
+    if spec.id == 'sslscan' and scope.addresses:
+        target = replace(target, connect_host=scope.addresses[0])
+    if backend.kind != 'native' and spec.kind == 'web' and scope.kind == 'host' and spec.id != 'sslscan':
+        raise ValueError('For this optional backend, use an explicitly authorized IP URL. Cross-environment hostname resolution is not supported.')
+    binary = binary or (find_binary(spec) if backend.kind == 'native' else spec.binaries[0])
     if not binary:
         raise ToolMissing(spec.install_hint)
     prof = spec.profiles[profile]
     started = datetime.now(timezone.utc).isoformat(timespec='seconds')
-    coverage = {'tool': spec.id, 'profile': prof.label, 'checks': prof.coverage, **spec.extra_coverage}
+    coverage = {'tool': spec.id, 'profile': prof.label, 'checks': prof.coverage,
+                'backend': backend.kind, 'authorized_target': label,
+                'resolved_addresses': list(scope.addresses), **spec.extra_coverage}
+    if spec.kind == 'net' and scope.addresses:
+        coverage['connection_address'] = target.value
+        coverage['scope_note'] = 'One approved resolved address is tested; other DNS addresses are not assessed.'
+    elif spec.id == 'sslscan' and scope.addresses:
+        coverage['connection_address'] = target.connect_host
+        coverage['scope_note'] = 'One approved address; original hostname retained for TLS SNI.'
+    elif scope.kind == 'host':
+        coverage['scope_note'] = 'Hostname-based scope; this tool resolves the authorized hostname again. This is not an IP egress sandbox.'
 
     def result(status, findings=(), error=''):
         return Scan(label, started, status, None, None, list(findings), error, coverage=coverage,
@@ -100,16 +124,21 @@ def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=
         return result('cancelled', error='Cancelled before the scan started.')
     with tempfile.TemporaryDirectory(prefix='sentinel-') as tmp:
         outfile = os.path.join(tmp, 'sentinel-out' + spec.outfile) if spec.outfile else ''
-        r = run(spec.build(binary, target, profile, outfile), prof.timeout, cancel)
+        argv = spec.build(binary, target, profile, outfile)
+        r = backend.run(argv, prof.timeout, cancel, tmp, invoke=run)
         if r.cancelled:
             return result('cancelled', error='Scan cancelled; results are incomplete.')
         if r.timed_out:
             return result('partial', error='The scan hit its time limit; results are incomplete.')
+        if getattr(r, 'truncated', False):
+            return result('partial', error='Tool output exceeded the evidence limit; no complete result is available.')
         text = r.stdout
         if outfile:
             try:
                 with open(outfile, encoding='utf-8', errors='replace') as fh:
-                    text = fh.read(runner.MAX_OUTPUT)
+                    text = fh.read(runner.MAX_OUTPUT + 1)
+                    if len(text) > runner.MAX_OUTPUT:
+                        return result('partial', error='Tool output exceeded the evidence limit; no complete result is available.')
             except OSError:
                 text = ''
     try:
@@ -119,4 +148,7 @@ def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=
     except Exception:       # untrusted output: any parse problem is a safe failure, never a crash
         return result('failed', error=f'{spec.name} did not finish: ' + (runner.clean(r.stderr, 300) or f'exit code {r.returncode}'))
     coverage.update(info)
-    return result('completed', findings, note)
+    findings = [replace(f, source=spec.id, confidence='low' if spec.id in ('nmap', 'nikto') else 'medium') for f in findings]
+    if r.returncode != 0:
+        return result('partial', findings, f'Tool exited with code {r.returncode}; results are incomplete. ' + note)
+    return result('partial' if ('truncat' in note.lower() or 'only the first' in note.lower()) else 'completed', findings, note)

@@ -1,4 +1,10 @@
-# Sentinel v0.2.0 — Security Intelligence
+# Sentinel v0.5 development — assessment architecture
+
+The Tkinter interface now shares one bounded background worker across website, external-tool and local dependency checks. Stop/cancel, timestamped progress events, redacted evidence, source/confidence fields and SQLite history are shared. Existing projects and adapters remain available.
+
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution model, scope boundaries, backend setup and verification limits. Native Windows is the default. Optional WSL/Docker modes in **Security tools** require an installed environment and supported tool; no automatic installs or image downloads occur. WSL cancellation is experimental and may leave Linux work running until the profile timeout. Docker images must be locally available and digest-pinned.
+
+Local verification of this revision: 114 tests discovered, 111 passed, three skipped because this environment lacks working Tk/Tcl and OpenSSL. CI requires the GUI tests on Windows and Linux. Earlier version-specific test counts below are historical. Live WSL/Docker execution and older 16 GB hardware performance remain unverified.
 
 Sentinel is a local-first security assessment prototype for Windows, with a modular Python engine. Its long-term goal is a professional authorized penetration testing platform. This release is a working **configuration assessment**, not a complete penetration test, security certification, or production-ready security platform.
 
@@ -45,7 +51,7 @@ Windows: `%LOCALAPPDATA%\Sentinel\sentinel.sqlite3`. Other platforms: `~/.local/
 - `sentinel/app.py`: desktop UI; a background thread performs a single assessment without blocking the main event loop.
 - `tests/`: repeatable local validation.
 
-See ROADMAP.md for the intended product direction. Paid modules, AI, payment, vulnerability feeds, exploitation, active network scans and automatic fixes are **not implemented** in this release.
+See ROADMAP.md for the intended product direction. Paid modules, AI, payments, automatic online vulnerability feeds, exploitation and automatic fixes are **not implemented**. Optional external-tool checks and local advisory matching are available as described below.
 
 ## v0.2 optional DNS and CLI
 

@@ -57,7 +57,8 @@ def parse_json(text, private=False):
 
 
 def build(binary, target, profile, outfile):
-    return [binary, '--no-errors', '--color=never', '--log-json=' + outfile, *PROFILES[profile].args, target.url]
+    return [binary, '--no-errors', '--color=never', '--follow-redirect=never',
+            '--max-threads=1', '--log-json=' + outfile, *PROFILES[profile].args, target.url]
 
 
 SPEC = ToolSpec('whatweb', 'WhatWeb technology fingerprint', 'Shows which web server, framework and CMS a site advertises, and their versions.', 'web',

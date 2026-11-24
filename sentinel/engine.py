@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import http.client
 import ssl
 import re
+from .evidence import sanitize
 
 @dataclass(frozen=True)
 class Target:
@@ -13,6 +14,7 @@ class Target:
     host: str
     port: int
     path: str
+    connect_host: str = ''
 
     @classmethod
     def parse(cls, value):
@@ -48,6 +50,8 @@ class Finding:
     title: str
     evidence: str
     remediation: str
+    confidence: str = 'medium'
+    source: str = 'sentinel'
 
 @dataclass
 class Scan:
@@ -63,7 +67,7 @@ class Scan:
     dns_domain: str = ''
 
     def to_dict(self):
-        return asdict(self)
+        return sanitize(asdict(self))
 
 
 def inspect_headers(target, status, headers, tls=None, cert=None):

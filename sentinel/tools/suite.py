@@ -28,6 +28,13 @@ class Suite:
 
     def scan(self, value, profile='standard', attested=False, confirm='', cancel=None, resolver=None,
              run=runner.run, lookup=find_binary, web_scan=engine.scan):
+        if attested is not True:
+            raise PermissionError('Confirm ownership or written permission before testing.')
+        if profile not in self.profiles:
+            raise ValueError('Unknown scan profile.')
+        if cancel is not None and cancel.is_set():
+            return Scan(str(value), datetime.now(timezone.utc).isoformat(), 'cancelled', None, None, [],
+                        'Cancelled before resolution.', profile='web-checkup-' + profile)
         target, scope, label = parse_scope(self, value, resolver)
         require_authorization(scope, attested, confirm)
         started = datetime.now(timezone.utc).isoformat(timespec='seconds')

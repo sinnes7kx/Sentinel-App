@@ -35,5 +35,13 @@ jobs:
         run: python -m pip install -r requirements-intelligence.txt
       - name: Compile source
         run: python -m compileall -q sentinel tests
-      - name: Run local regression tests
+      - name: Run local regression and GUI tests (Linux)
+        if: runner.os == 'Linux'
+        env:
+          SENTINEL_REQUIRE_GUI: '1'
+        run: xvfb-run -a python -m unittest discover -s tests -v
+      - name: Run local regression and GUI tests (Windows)
+        if: runner.os == 'Windows'
+        env:
+          SENTINEL_REQUIRE_GUI: '1'
         run: python -m unittest discover -s tests -v

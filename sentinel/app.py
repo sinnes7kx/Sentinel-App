@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-from threading import Thread, Event
+from threading import Event
+from .orchestration import for_app
 from queue import Queue, Empty
 from pathlib import Path
 from .engine import Target, scan, compare
@@ -12,7 +13,8 @@ from .report import html_report
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Sentinel | Security assessment • v0.2'); self.geometry('1100x740'); self.minsize(850,650)
+        self.title('Sentinel | Security assessment • v0.5'); self.geometry('1100x740'); self.minsize(850,650)
+        self.orchestrator = for_app(self)
         self.configure(bg='#101923'); self.store=Store(); self.queue=Queue(); self.current=None; self.records=[]; self.busy=False; self.cancel_event=Event()
         self.protocol('WM_DELETE_WINDOW',self.close)
         style=ttk.Style(self); style.theme_use('clam')
@@ -24,7 +26,7 @@ class App(tk.Tk):
         self.project=tk.StringVar(value='My website'); self.url=tk.StringVar(value='https://'); self.auth=tk.BooleanVar(); self.status=tk.StringVar(value='Ready • No assessment run.'); self.summary=tk.StringVar(value='No findings yet')
         header=tk.Frame(self,bg='#101923'); header.pack(fill='x',padx=24,pady=(18,12))
         tk.Label(header,text='SENTINEL',font=('Segoe UI',24,'bold'),bg='#101923',fg='#6de0c0').pack(side='left')
-        tk.Label(header,text='  /  SECURITY ASSESSMENT    v0.2 COMMUNITY',bg='#101923',fg='#a7bacb',font=('Segoe UI',10)).pack(side='left')
+        tk.Label(header,text='  /  SECURITY ASSESSMENT    v0.5 DEVELOPMENT',bg='#101923',fg='#a7bacb',font=('Segoe UI',10)).pack(side='left')
         ttk.Button(header,text='Security tools…',command=self.open_network).pack(side='right')
         ttk.Button(header,text='Local dependencies',command=self.open_dependencies).pack(side='right',padx=8)
         main=ttk.Frame(self,padding=16); main.pack(fill='both',expand=True,padx=24,pady=(0,12))
@@ -67,14 +69,19 @@ class App(tk.Tk):
             target=Target.parse(self.url.get()); dns=domain_name(self.dns.get()) if self.dns.get().strip() else ''; pid=self.store.project(self.project.get()); name=self.project.get().strip()
         except (ValueError,PermissionError) as e:messagebox.showerror('Cannot start',str(e));return
         self.busy=True; self.cancel_event=Event(); self.stop_btn.configure(state='normal'); self.run_btn.configure(state='disabled'); self.status.set('Assessing authorized URL…'); self.auth.set(False)
-        def worker():
-            try:self.queue.put((pid,name,scan(target.url,authorized=True,cancel=self.cancel_event,dns_domain=dns).to_dict(),None))
-            except Exception as e:self.queue.put((pid,name,None,type(e).__name__))
-        Thread(target=worker,daemon=True).start()
+        try:
+            self.job = self.orchestrator.submit(
+                lambda: scan(target.url, authorized=True, cancel=self.cancel_event, dns_domain=dns).to_dict(),
+                lambda result, error: self.queue.put((pid, name, result, error)), self.cancel_event)
+            self.status.set('Queued; one check runs at a time.')
+        except RuntimeError as exc:
+            self.queue.put((pid, name, None, str(exc)))
     def stop(self):
         if self.busy:
             self.cancel_event.set(); self.stop_btn.configure(state='disabled'); self.status.set('Stopping after current bounded operation…')
     def poll(self):
+        if self.busy and hasattr(self, 'job') and not self.cancel_event.is_set():
+            self.status.set(self.job.state.capitalize() + ' • authorized assessment')
         try:
             pid,name,result,error=self.queue.get_nowait(); self.busy=False; self.stop_btn.configure(state='disabled'); self.run_btn.configure(state='normal')
             if error:self.status.set('Assessment error: '+error)
@@ -125,6 +132,13 @@ class App(tk.Tk):
         self.set_detail('COMPARISON\n\nNew: '+(', '.join(d['new']) or 'None')+'\nStill observed: '+(', '.join(d['still_present']) or 'None')+'\nNot observed on retest: '+(', '.join(d['not_observed']) or 'None')+'\n\nNot observed does not prove a vulnerability is resolved. Confirm changes in context.')
     def close(self):
         if self.busy and not messagebox.askyesno('Exit','An assessment is running. Exit without saving its result?'):return
-        self.cancel_event.set(); self.store.close(); self.destroy()
+        self.cancel_event.set(); self.orchestrator.shutdown(); self.store.close(); self.destroy()
 
-def main():App().mainloop()
+def main():
+    import os
+    from .logging_setup import configure
+    try:
+        configure(Path(os.environ.get('LOCALAPPDATA') or Path.home()/'.local'/'share')/'Sentinel'/'events.jsonl')
+    except OSError:
+        pass  # A read-only log directory must not stop assessment or history access.
+    App().mainloop()

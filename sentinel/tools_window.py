@@ -1,11 +1,13 @@
 """Beginner window for every integrated security tool."""
 import tkinter as tk
 from tkinter import ttk, messagebox
-from threading import Thread, Event
+from threading import Event
+from .orchestration import for_app
 from queue import Queue, Empty
 from .tools import TOOLS
 from .tools.base import ToolMissing, parse_scope
 from .tools.scope import require_authorization
+from .tools.backends import Backend
 
 DEFAULTS = {'net': '192.168.1.1', 'web': 'https://'}
 LABELS = {'net': 'Target: an IP address, a host name, or a home/office network such as 192.168.1.0/24',
@@ -15,11 +17,13 @@ LABELS = {'net': 'Target: an IP address, a host name, or a home/office network s
 class ToolsWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
+        self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
         self.title('Sentinel | Security tools'); self.geometry('940x720'); self.minsize(780, 600); self.configure(bg='#101923')
         self.tool = TOOLS[0]; self.target = tk.StringVar(value=DEFAULTS['web']); self.profile = tk.StringVar()
         self.auth = tk.BooleanVar(); self.confirm = tk.StringVar(); self.status = tk.StringVar(value='Ready.')
         self.tool_name = tk.StringVar(value=self.tool.name); self.info = tk.StringVar(); self.label = tk.StringVar()
+        self.backend = tk.StringVar(value='native'); self.environment = tk.StringVar()
         body = ttk.Frame(self, padding=16); body.pack(fill='both', expand=True, padx=16, pady=16)
         ttk.Label(body, text='Choose a check', font=('Segoe UI', 14, 'bold')).pack(anchor='w')
         box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly'); box.pack(fill='x', pady=(4, 2))
@@ -31,6 +35,11 @@ class ToolsWindow(tk.Toplevel):
         self.run_btn = ttk.Button(row, text='Start', command=self.start); self.run_btn.grid(row=0, column=1, padx=(10, 0))
         self.stop_btn = ttk.Button(row, text='Stop', command=self.stop, state='disabled'); self.stop_btn.grid(row=0, column=2, padx=(8, 0))
         self.profiles = ttk.Frame(body); self.profiles.pack(fill='x', pady=8)
+        back = ttk.Frame(body); back.pack(fill='x', pady=4)
+        ttk.Label(back, text='Run using').pack(side='left')
+        ttk.Combobox(back, textvariable=self.backend, values=['native', 'wsl', 'docker'], state='readonly', width=10).pack(side='left', padx=8)
+        ttk.Label(back, text='WSL distribution / installed Docker image digest:').pack(side='left')
+        ttk.Entry(back, textvariable=self.environment).pack(side='left', fill='x', expand=True)
         ttk.Checkbutton(body, text='I own this target or have written permission to test it.', variable=self.auth).pack(anchor='w', pady=(4, 2))
         conf = ttk.Frame(body); conf.pack(fill='x', pady=(0, 8))
         ttk.Label(conf, text='Only for targets outside your private network — type the host name or IP again to confirm:').pack(side='left')
@@ -43,6 +52,10 @@ class ToolsWindow(tk.Toplevel):
         self.detail = tk.Text(body, height=9, wrap='word', bg='#101923', fg='#d9e5ed', relief='flat', font=('Segoe UI', 10), padx=10, pady=10)
         self.detail.pack(fill='both', expand=True, pady=(8, 0))
         tk.Label(self, textvariable=self.status, bg='#101923', fg='#9fc2d4', anchor='w').pack(fill='x', padx=16, pady=(0, 10))
+        self.target.trace_add('write', lambda *_: self.auth.set(False))
+        self.profile.trace_add('write', lambda *_: self.auth.set(False))
+        self.backend.trace_add('write', lambda *_: self.auth.set(False))
+        self.environment.trace_add('write', lambda *_: self.auth.set(False))
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.after(150, self.poll)
 
     def say(self, text):
@@ -66,8 +79,12 @@ class ToolsWindow(tk.Toplevel):
     def start(self):
         if self.busy: return
         try:
-            _, scope, _ = parse_scope(self.tool, self.target.get()); require_authorization(scope, self.auth.get(), self.confirm.get())
-            if not self.tool.installed(): raise ToolMissing(self.tool.install_hint)
+            if not self.auth.get(): raise PermissionError('Confirm that you own this target or have written permission to test it.')
+            backend = Backend(self.backend.get(), self.environment.get().strip())
+            backend.validate(self.tool.id)
+            if backend.kind == 'native' and not self.tool.installed(): raise ToolMissing(self.tool.install_hint)
+            if backend.kind == 'wsl':
+                if not messagebox.askokcancel('WSL execution', 'WSL execution is experimental. Stop ends the Windows launcher, but Linux work may continue until its profile time limit. Use native or Docker for stronger cancellation. Continue?', parent=self): return
             name = self.app.project.get(); pid = self.app.store.project(name)
         except ToolMissing as e:
             messagebox.showinfo('Tool needed', str(e), parent=self); return
@@ -76,15 +93,21 @@ class ToolsWindow(tk.Toplevel):
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
-        def worker():
-            try: self.queue.put((pid, name, tool.scan(value, prof, True, conf, ev).to_dict(), None))
-            except Exception as e: self.queue.put((pid, name, None, type(e).__name__))
-        Thread(target=worker, daemon=True).start()
+        self.auth.set(False)
+        try:
+            self.job = self.orchestrator.submit(
+                lambda: tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict(),
+                lambda result, error: self.queue.put((pid, name, result, error)), ev)
+            self.status.set('Queued; one check runs at a time.')
+        except RuntimeError as exc:
+            self.queue.put((pid, name, None, str(exc)))
 
     def stop(self):
         if self.busy: self.cancel_event.set(); self.stop_btn.configure(state='disabled'); self.status.set('Stopping…')
 
     def poll(self):
+        if self.busy and hasattr(self, 'job') and not self.cancel_event.is_set():
+            self.status.set(self.job.state.capitalize() + ' • security check')
         try:
             pid, name, res, err = self.queue.get_nowait()
             self.busy = False; self.bar.stop(); self.run_btn.configure(state='normal'); self.stop_btn.configure(state='disabled')
@@ -103,7 +126,7 @@ class ToolsWindow(tk.Toplevel):
     def selected(self, _=None):
         s = self.tree.selection()
         if s and self.result:
-            f = self.result['findings'][int(s[0])]; self.say(f"{f['title']}\n\nWHAT WE SAW\n{f['evidence']}\n\nWHAT TO DO\n{f['remediation']}")
+            f = self.result['findings'][int(s[0])]; self.say(f"{f['title']}\nConfidence: {f.get('confidence', 'unknown')} | Source: {f.get('source', 'legacy')}\n\nWHAT WE SAW\n{f['evidence']}\n\nWHAT TO DO\n{f['remediation']}")
 
     def close(self):
         if self.busy and not messagebox.askyesno('Exit', 'A check is running. Stop it and close?', parent=self): return
