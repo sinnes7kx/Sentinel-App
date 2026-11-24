@@ -1,4 +1,14 @@
-# Sentinel 0.2.0 — Security Intelligence
+# Sentinel v0.5 development — shared assessment execution
+
+* Preserves Tkinter and existing tool/dependency functionality; no ZIP replacement or destructive database migration.
+* Shares a single bounded task manager across windows, with queued/running/terminal events, cancellation and app-wide shutdown.
+* Enforces attestation before DNS and captures target/profile/backend choices at submission. Nmap and sslscan use a checked address; WhatWeb redirects are disabled.
+* Adds best-effort redaction, source/confidence, dependency project history and rotating metadata-only logs.
+* Treats nonzero exits and bounded-output truncation as incomplete coverage.
+* Adds optional explicitly configured WSL/Docker backends for selected tools. Runtime compatibility and WSL cancellation remain experimental; see ARCHITECTURE.md.
+* Adds scheduler, subprocess, scope, history, backend and real Tk/loopback integration tests; CI requires GUI availability.
+
+## Historical 0.2.0 notes
 
 A complete replacement source release; existing SQLite projects and history remain readable. No database migration is necessary. Back up the database before updating. v0.1 results are deliberately not compared against v0.2 results because check coverage changed.
 

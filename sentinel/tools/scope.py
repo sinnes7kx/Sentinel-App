@@ -14,6 +14,7 @@ class NetTarget:
     kind: str       # 'ip' | 'cidr' | 'host'
     private: bool   # every address is loopback / private / link-local
     hosts: int      # number of addresses in scope
+    addresses: tuple = ()
 
 
 def _is_local(addr):
@@ -26,6 +27,8 @@ def _default_resolver(host):
 
 def parse_net_target(text, resolver=_default_resolver):
     v = (text or '').strip()
+    if '%' in v:
+        raise ValueError('IPv6 zone identifiers are not supported; enter an unambiguous address.')
     if not v or v.startswith('-') or any(ord(c) < 33 or ord(c) == 127 for c in v):
         raise ValueError('Enter one IP address, one network such as 192.168.1.0/24, or one host name.')
     if '/' in v:
@@ -51,7 +54,7 @@ def parse_net_target(text, resolver=_default_resolver):
         raise ValueError('The host name could not be resolved.') from None
     if not addrs:
         raise ValueError('The host name could not be resolved.')
-    return NetTarget(v.lower(), 'host', all(_is_local(a) for a in addrs), 1)
+    return NetTarget(v.lower(), 'host', all(_is_local(a) for a in addrs), 1, tuple(dict.fromkeys(str(a) for a in addrs)))
 
 
 def require_authorization(target, attested, typed_confirmation=''):

@@ -1,6 +1,6 @@
 """Nmap: find which network services a system you own is exposing.
 
-Three fixed profiles, no NSE scripts, no OS detection, no exploitation. Results
+Three fixed profiles, no user-supplied scripts, no OS detection, no exploitation. Results
 become plain-English findings; an open port is an exposure indicator, not a
 confirmed vulnerability.
 """
@@ -65,7 +65,9 @@ def find_binary():
 
 
 def build_argv(binary, target, profile):
-    argv = [binary, '-n', '-T3', '--max-retries', '2', '-oX', '-']
+    argv = [binary, '-sT', '-n', '-T3', '--max-retries', '2', '-oX', '-']
+    if ':' in target.value:
+        argv.append('-6')
     if target.hosts == 1:
         argv.append('-Pn')   # one host: skip ping so firewalled hosts are not reported as "down"
     argv.extend(PROFILES[profile].args)
@@ -113,7 +115,7 @@ def findings_from_hosts(hosts, private):
             if risk:
                 label, sev_private, sev_public, why, fix = risk
                 out.append(Finding(fid, sev_private if private else sev_public, f"{label} reachable on {h['addr']}",
-                                   evidence + ' ' + why, fix))
+                                   evidence + ' Port-based risk estimate; the associated service and its configuration are not confirmed. ' + why, fix))
             else:
                 out.append(Finding(fid, 'info', f"Open port {p['port']}/{p['proto']} on {h['addr']}", evidence,
                                    'If nothing needs this service, stop it or block the port with a firewall. '
@@ -131,7 +133,7 @@ def _parse(text, private):
 SPEC = ToolSpec('nmap', 'Nmap port scan', 'Finds the network services (open ports) a system is exposing.', 'net',
                 ('nmap',), INSTALL_HINT, PROFILES, lambda b, t, p, o: build_argv(b, t, p), _parse,
                 win_paths=('Nmap\\nmap.exe',),
-                extra_coverage={'udp': 'not scanned', 'scripts': 'none run', 'os_detection': 'not performed'})
+                extra_coverage={'udp': 'not scanned', 'scripts': 'no user-selected NSE; version detection may invoke version-category scripts', 'os_detection': 'not performed'})
 
 
 def scan_network(value, profile='quick', attested=False, typed_confirmation='', cancel=None, **kw):

@@ -9,6 +9,9 @@ class DependencyWindowTests(unittest.TestCase):
         try:
             root = tk.Tk()
         except tk.TclError:
+            import os
+            if os.environ.get('SENTINEL_REQUIRE_GUI'):
+                raise
             self.skipTest('Graphical display unavailable')
         root.withdraw()
         try:

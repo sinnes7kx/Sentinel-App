@@ -2,7 +2,9 @@
 import json
 from pathlib import Path
 from queue import Queue, Empty
-from threading import Thread
+from threading import Event
+from .orchestration import for_app
+from .ui_lifecycle import watch_poll
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from .dependencies import assess
@@ -11,8 +13,13 @@ from .dependencies import assess
 class DependencyWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
+        watch_poll(self)
         self.title('Sentinel | Local dependency check')
         self.geometry('880x650')
+        self.orchestrator = for_app(app)
+        self.app = app
+        self.cancel_event = Event()
+        self.bind('<Destroy>', lambda e: self.cancel_event.set() if e.widget is self else None, add='+')
         self.queue = Queue()
         self.busy = False
         self.result = None
@@ -38,6 +45,7 @@ class DependencyWindow(tk.Toplevel):
         row.pack(fill='x', pady=12)
         self.button = ttk.Button(row, text='3. Check these files', command=self.start)
         self.button.pack(side='left')
+        ttk.Button(row, text='Stop', command=lambda: self.cancel_event.set()).pack(side='left', padx=8)
         ttk.Button(row, text='Export result JSON', command=self.export).pack(side='left', padx=8)
         ttk.Label(body, textvariable=self.status, wraplength=800).pack(anchor='w', pady=5)
         self.tree = ttk.Treeview(body, columns=('package', 'version', 'result'), show='headings', height=8)
@@ -48,7 +56,7 @@ class DependencyWindow(tk.Toplevel):
         self.detail = tk.Text(body, height=9, wrap='word')
         self.detail.pack(fill='both', expand=True, pady=8)
         self.say('Affected: an advisory matches this version.\nNo match in supplied feed: only these records were checked.\nUnknown: more information is needed.\n\nA result is not proof of exploitability or overall safety. Feed freshness is not verified.')
-        self.after(100, self.poll)
+        self.poll_timer = self.after(100, self.poll)
 
     def choose(self, variable):
         path = filedialog.askopenfilename(parent=self)
@@ -69,20 +77,28 @@ class DependencyWindow(tk.Toplevel):
             messagebox.showinfo('Choose files', 'Choose both your inventory and advisory file.', parent=self)
             return
         self.busy = True
+        if hasattr(self.app, 'store'):
+            try:
+                self.project_id = self.app.store.project(self.app.project.get())
+            except ValueError as exc:
+                self.busy = False
+                messagebox.showerror('Project needed', str(exc), parent=self)
+                return
         self.result = None
         self.tree.delete(*self.tree.get_children())
         self.button.configure(state='disabled')
         self.status.set('Reading local files…')
-        def worker():
-            try:
-                self.queue.put((assess(inventory, feed, format), None))
-            except RuntimeError as exc:
-                self.queue.put((None, str(exc)))
-            except Exception:
-                self.queue.put((None, 'The files could not be assessed. Check their format, size and read permissions.'))
-        Thread(target=worker, daemon=True).start()
+        self.cancel_event = Event()
+        try:
+            self.job = self.orchestrator.submit(
+                lambda: assess(inventory, feed, format, cancel=self.cancel_event),
+                lambda result, error: self.queue.put((result, error)), self.cancel_event)
+        except RuntimeError as exc:
+            self.queue.put((None, str(exc)))
 
     def poll(self):
+        if self.busy and hasattr(self, 'job'):
+            self.status.set('Stopping…' if self.cancel_event.is_set() else self.job.state.capitalize() + ' • local files only')
         try:
             result, error = self.queue.get_nowait()
             self.busy = False
@@ -92,6 +108,9 @@ class DependencyWindow(tk.Toplevel):
                 self.status.set('Assessment could not complete.')
                 self.say(error)
             else:
+                if hasattr(self.app, 'store'):
+                    from .dependency_result import scan_record
+                    self.app.store.save(self.project_id, scan_record(result))
                 summary = result['summary']
                 self.status.set(f"{summary['affected']} affected • {summary['unknown']} unknown • {summary['unsupported_inventory_entries']} unsupported entries. Coverage remains partial.")
                 for index, package in enumerate(result['packages']):
@@ -99,7 +118,10 @@ class DependencyWindow(tk.Toplevel):
                 self.say('Select a package for evidence and next steps.\n\nUnsupported inventory entries:\n' + json.dumps(result['unsupported_inventory_entries'], indent=2))
         except Empty:
             pass
-        self.after(100, self.poll)
+        except Exception as exc:
+            self.status.set('Local history/UI error: ' + type(exc).__name__ + '. You can still export the result.')
+        if self.winfo_exists():
+            self.poll_timer = self.after(100, self.poll)
 
     def selected(self, event=None):
         selection = self.tree.selection()

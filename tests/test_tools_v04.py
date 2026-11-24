@@ -123,7 +123,8 @@ if __name__ == '__main__': unittest.main()
 
 import os
 FIX = os.path.join(os.path.dirname(__file__), 'fixtures')
-rd = lambda n: open(os.path.join(FIX, n), encoding='utf-8').read()
+from pathlib import Path
+rd = lambda n: Path(FIX, n).read_text(encoding='utf-8')
 
 class TestRealToolOutput(unittest.TestCase):
     """Captured from the real tools (Nmap 7.94, WhatWeb 0.5.5, sslscan 2.1.2, Nikto 2.1.5)."""

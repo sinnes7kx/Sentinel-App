@@ -100,7 +100,11 @@ def validate_records(records):
                         raise ValueError('Invalid range event.')
 
 
-def assess(requirements, advisories, inventory_format='requirements'):
+def assess(requirements, advisories, inventory_format='requirements', cancel=None):
+    def checkpoint():
+        if cancel is not None and cancel.is_set():
+            raise InterruptedError('Dependency assessment cancelled.')
+    checkpoint()
     require_packaging()
     inventory, inventory_hash = read_local(requirements)
     feed, feed_hash = read_local(advisories)
@@ -115,6 +119,7 @@ def assess(requirements, advisories, inventory_format='requirements'):
     # Index once: large local feeds should not be scanned once per dependency.
     index = {}
     for record in records:
+        checkpoint()
         if record.get('withdrawn'):
             continue
         for affected in record['affected']:
@@ -123,9 +128,11 @@ def assess(requirements, advisories, inventory_format='requirements'):
                 index.setdefault(normalize_name(package['name']), {}).setdefault(record['id'], []).append(affected)
     results = []
     for name, version in packages:
+        checkpoint()
         matches, unresolved, evaluated, details = [], [], [], []
         relevant = index.get(name, {})
         for advisory_id, entries in sorted(relevant.items()):
+            checkpoint()
             decisions = [match_affected(version, entry) for entry in entries]
             if any(matched is True for matched, _ in decisions):
                 state = 'affected'
@@ -178,7 +185,8 @@ def main(argv=None):
     except (ValueError, OSError) as exc:
         # Avoid echoing input contents, private filesystem paths or feed text.
         parser.error('Cannot assess local inputs: ' + type(exc).__name__)
-    print(json.dumps(result, indent=2))
+    from .evidence import sanitize
+    print(json.dumps(sanitize(result), indent=2))
     return 1 if any(p['advisory_ids'] for p in result['packages']) else 2
 
 

@@ -1,6 +1,7 @@
 import sqlite3, json
 from pathlib import Path
 import os
+from .evidence import sanitize
 
 class Store:
     def __init__(self, path=None):
@@ -22,9 +23,10 @@ class Store:
     def projects(self):
         return [r[0] for r in self.conn.execute('SELECT name FROM projects ORDER BY name')]
     def save(self, project, result):
+        result = sanitize(result)
         with self.conn:
             cur = self.conn.execute('INSERT INTO scans(project,target,started,result) VALUES (?,?,?,?)',(project,result['target'],result['started'],json.dumps(result)))
         return cur.lastrowid
     def history(self, project):
-        return [(r[0],json.loads(r[1])) for r in self.conn.execute('SELECT id,result FROM scans WHERE project=? ORDER BY id DESC',(project,))]
+        return [(r[0],sanitize(json.loads(r[1]))) for r in self.conn.execute('SELECT id,result FROM scans WHERE project=? ORDER BY id DESC',(project,))]
     def close(self): self.conn.close()

@@ -110,10 +110,11 @@ def _parse(text, private):
 
 
 def build(binary, target, profile, outfile):
-    host = '[%s]' % target.host if ':' in target.host else target.host
-    return [binary, '--no-colour', '--xml=' + outfile, f'{host}:{target.port}']
+    address = target.connect_host or target.host
+    host = '[%s]' % address if ':' in address else address
+    return [binary, '--no-colour', '--sni-name=' + target.host, '--xml=' + outfile, f'{host}:{target.port}']
 
 
 SPEC = ToolSpec('sslscan', 'sslscan TLS check', 'Checks the encryption settings and certificate of an HTTPS site.', 'web',
                 ('sslscan',), INSTALL_HINT, PROFILES, build, _parse, outfile='.xml', schemes=('https',),
-                note='Makes a handful of TLS connections; it does not send web requests.')
+                note='Makes multiple TLS probes, including Heartbleed and renegotiation checks; it does not send HTTP requests.')
