@@ -1,0 +1,3 @@
+[
+{"target":"http://127.0.0.1:8080/","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.5.5"}},"plugins":{"Country":{"string":["RESERVED"],"module":["ZZ"]},"HTTPServer":{"os":["Ubuntu Linux"],"string":["SimpleHTTP/0.6 Python/3.12.3, Apache/2.4.41 (Ubuntu)"]},"IP":{"string":["127.0.0.1"]},"PHP":{"version":["7.4.3"]},"Python":{"version":["3.12.3,"]},"Title":{"string":["t"]},"X-Powered-By":{"string":["PHP/7.4.3"]}}}
+]
