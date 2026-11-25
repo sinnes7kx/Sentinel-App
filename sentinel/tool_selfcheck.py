@@ -6,6 +6,7 @@ import uuid
 from .tool_inventory import managed_backend
 from .tools.backends import local_docker_prefix, docker_cleanup
 from .tools.runner import run
+from .zap_setup import prepare_zap
 
 IMAGE = re.compile(r'sha256:[0-9a-f]{64}')
 VERSION = re.compile(r'(?<![\w.])\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?![\w.])')
@@ -77,3 +78,31 @@ def check_installation(cancel, invoke=run, which=shutil.which,
     if all(row['state'] == 'Version verified' for row in rows) and len(rows) == len(TOOLS):
         return finish('completed', 'Toolkit version checks passed. Network access and assessment results are not tested.')
     return finish('partial', 'One or more tools could not report a version. Review the results and retry setup.')
+
+
+def check_zap_installation(cancel, invoke=run, which=shutil.which, platform=None):
+    """Verify a prepared ZAP image without installing Docker or downloading ZAP."""
+    def finish(status, message, state='Unverified'):
+        return {'status': status, 'message': message,
+                'rows': [{'name': 'ZAP (offline test)', 'state': state,
+                          'detail': message, 'action': 'zap'}]}
+
+    if cancel.is_set():
+        return finish('cancelled', 'ZAP installation test cancelled.')
+    docker = which('docker')
+    if not docker:
+        return finish('partial', 'Docker is not detected. Prepare Docker first.')
+    prefix = local_docker_prefix(platform)
+    prefix[0] = docker
+    try:
+        health = invoke(prefix + ['version', '--format', '{{.Server.Os}}'], 20, cancel)
+        if cancel.is_set():
+            return finish('cancelled', 'ZAP installation test cancelled.')
+        if (health.returncode != 0 or health.cancelled or health.timed_out
+                or health.truncated or health.stdout.strip() != 'linux'):
+            return finish('partial', 'Start the Docker Linux engine and retry.')
+        result = prepare_zap(prefix, cancel, invoke, allow_download=False)
+    except (OSError, ValueError, RuntimeError):
+        return finish('partial', 'ZAP installation test could not finish. Check Docker and retry.')
+    return finish(result['status'], result['message'],
+                  'Version verified' if result['status'] == 'completed' else 'Unverified')
