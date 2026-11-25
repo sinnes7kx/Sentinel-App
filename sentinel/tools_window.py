@@ -160,6 +160,7 @@ class ToolsWindow(tk.Toplevel):
                                       self.backend, self.environment), self.auth)
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
+        watch_variables(self, (self.target,), self.target_changed_for_recommendation)
         self.update_backend_controls()
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
 
@@ -216,6 +217,9 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_status.set('')
         self.update_tool_info()
         self.update_backend_controls()
+
+    def target_changed_for_recommendation(self, *_):
+        self.recommendation_text.set('Choose for me to review the setup for this address.')
 
     def choose_engine(self):
         if self.busy or self.wsl_busy:
