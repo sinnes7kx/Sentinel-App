@@ -9,6 +9,7 @@ from queue import Queue, Empty
 from pathlib import Path
 from .engine import Target, scan, compare
 from .standard_assessment import standard_scan
+from .extended_assessment import extended_scan
 from .store import Store, REMEDIATION_STATES
 from .dnscheck import domain_name
 import json
@@ -113,10 +114,10 @@ class App(tk.Tk):
         self.stop_btn.grid(row=1, column=3, sticky='ew', pady=(3, 0))
         ttk.Label(form, text='Assessment depth', style='Muted.TLabel').grid(row=2, column=0, sticky='w', pady=(9, 0))
         ttk.Label(form, text='Optional DNS domain', style='Muted.TLabel').grid(row=2, column=1, sticky='w', pady=(9, 0))
-        ttk.Combobox(form, textvariable=self.assessment_profile, values=('Quick', 'Standard'),
+        ttk.Combobox(form, textvariable=self.assessment_profile, values=('Quick', 'Standard', 'Extended'),
                      width=12, state='readonly').grid(row=3, column=0, sticky='ew', padx=(0, 8))
         ttk.Entry(form, textvariable=self.dns).grid(row=3, column=1, sticky='ew', padx=(0, 8))
-        ttk.Label(form, text='Standard adds modern TLS checks.', style='Muted.TLabel',
+        ttk.Label(form, text='Extended adds cross-origin checks.', style='Muted.TLabel',
                   wraplength=170).grid(row=3, column=2, columnspan=2, sticky='w')
 
     def build_overview(self, parent):
@@ -322,8 +323,8 @@ class App(tk.Tk):
         if self.busy or self.confirming:return
         try:
             profile = self.assessment_profile.get()
-            if profile not in ('Quick', 'Standard'): raise ValueError('Unknown assessment profile.')
-            operation = standard_scan if profile == 'Standard' else scan
+            if profile not in ('Quick', 'Standard', 'Extended'): raise ValueError('Unknown assessment profile.')
+            operation = {'Quick': scan, 'Standard': standard_scan, 'Extended': extended_scan}[profile]
             target=Target.parse(self.url.get()); dns=domain_name(self.dns.get()) if self.dns.get().strip() else ''; name=self.project.get().strip()
             self.confirming = True
             try:
