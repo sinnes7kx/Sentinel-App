@@ -29,7 +29,7 @@ class ToolsWindow(tk.Toplevel):
         watch_poll(self)
         self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
-        self.title('Sentinel | Security tools'); self.geometry('1000x750'); self.minsize(820, 650); self.configure(bg=CANVAS)
+        self.title('Sentinel | Security tools'); self.geometry('920x620'); self.minsize(820, 560); self.configure(bg=CANVAS)
         self.tool = TOOLS[0]; self.target = tk.StringVar(value=DEFAULTS['web']); self.profile = tk.StringVar()
         self.auth = tk.BooleanVar(); self.confirm = tk.StringVar(); self.status = tk.StringVar(value='Ready.')
         self.tool_name = tk.StringVar(value=self.tool.name); self.info = tk.StringVar(); self.label = tk.StringVar()
@@ -51,88 +51,87 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_busy = False
         self.wsl_cancel = Event()
         self.bind('<Destroy>', self.cancel_wsl_probe, add='+')
-        shell = ttk.Frame(self, padding=16, style='Canvas.TFrame')
+        shell = ttk.Frame(self, padding=10, style='Canvas.TFrame')
         shell.pack(fill='both', expand=True)
         ttk.Label(shell, text='Security tools', style='WorkspaceTitle.TLabel').pack(anchor='w')
         ttk.Label(shell, text='Choose what to check, enter its address, then review what Sentinel finds.',
-                  style='Canvas.TLabel').pack(anchor='w', pady=(2, 10))
+                  style='Canvas.TLabel').pack(anchor='w', pady=(1, 5))
         self.tabs = ttk.Notebook(shell)
         self.tabs.pack(fill='both', expand=True)
-        self.setup_page = ttk.Frame(self.tabs)
-        results = self.results_page = ttk.Frame(self.tabs, padding=12)
-        self.tabs.add(self.setup_page, text='1. Configure assessment')
-        self.tabs.add(results, text='2. Findings & evidence')
-        # Keep authorization and setup controls reachable on smaller displays.
-        canvas = tk.Canvas(self.setup_page, background=PANEL, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.setup_page, orient='vertical', command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side='right', fill='y')
-        canvas.pack(side='left', fill='both', expand=True)
-        body = ttk.Frame(canvas, padding=12)
-        body_id = canvas.create_window((0, 0), window=body, anchor='nw')
-        body.bind('<Configure>', lambda event: canvas.configure(scrollregion=canvas.bbox('all')))
-        canvas.bind('<Configure>', lambda event: canvas.itemconfigure(body_id, width=event.width))
+        self.setup_page = ttk.Frame(self.tabs, padding=10)
+        self.engine_page = ttk.Frame(self.tabs, padding=10)
+        results = self.results_page = ttk.Frame(self.tabs, padding=8)
+        self.tabs.add(self.setup_page, text='Assessment')
+        self.tabs.add(self.engine_page, text='Engine settings')
+        self.tabs.add(results, text='Findings & evidence')
+        self.tabs.enable_traversal()
+        # Settings use ordinary notebook pages, never a scrolling canvas.
+        body = self.setup_page
         ttk.Label(body, text='1. What do you want to check?', style='Title.TLabel').pack(anchor='w')
         box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly')
         box.pack(fill='x', pady=(4, 2))
         box.bind('<<ComboboxSelected>>', self.tool_changed)
-        ttk.Label(body, textvariable=self.info, wraplength=745, justify='left').pack(anchor='w', pady=(2, 8))
+        ttk.Label(body, textvariable=self.info, wraplength=760, justify='left').pack(anchor='w', pady=(2, 4))
         ttk.Label(body, textvariable=self.label, wraplength=745).pack(anchor='w')
         ttk.Entry(body, textvariable=self.target).pack(fill='x', pady=(3, 6))
         self.profiles = ttk.Frame(body)
-        self.profiles.pack(fill='x', pady=(2, 8))
-        ttk.Separator(body).pack(fill='x', pady=(0, 8))
-        ttk.Label(body, text='2. How should Sentinel run this check?', style='Title.TLabel').pack(anchor='w')
+        self.profiles.pack(fill='x', pady=(1, 4))
+        ttk.Separator(body).pack(fill='x', pady=4)
+        ttk.Label(body, text='2. Choose the setup', style='Title.TLabel').pack(anchor='w')
         self.engine_hint = tk.StringVar()
         ttk.Label(body, textvariable=self.engine_hint, wraplength=745,
                   style='Muted.TLabel').pack(anchor='w', pady=(2, 5))
         self.recommendation_text = tk.StringVar(value='Let Sentinel choose an existing setup, or change it manually.')
-        ttk.Label(body, textvariable=self.recommendation_text, wraplength=745,
-                  style='Muted.TLabel').pack(anchor='w', pady=(2, 5))
+        ttk.Label(self.engine_page, text='Advanced engine settings', style='Title.TLabel').pack(anchor='w', pady=(0, 4))
+        ttk.Label(self.engine_page, textvariable=self.recommendation_text, wraplength=760,
+                  style='Muted.TLabel', justify='left').pack(anchor='w', pady=(2, 5))
         choice_row = ttk.Frame(body)
         choice_row.pack(fill='x', pady=4)
         self.recommend_button = ttk.Button(choice_row, text='Choose for me', command=self.choose_engine)
         self.recommend_button.pack(side='left')
         self.advanced = tk.BooleanVar(value=False)
-        ttk.Checkbutton(choice_row, text='Advanced engine settings', variable=self.advanced,
-                        command=self.update_backend_controls).pack(side='left', padx=10)
-        back = self.backend_row = ttk.Frame(body)
+        ttk.Button(choice_row, text='Engine settings', command=lambda: self.tabs.select(self.engine_page)).pack(side='left', padx=6)
+        self.tabs.bind('<<NotebookTabChanged>>', self.on_tab_changed)
+        back = self.backend_row = ttk.Frame(self.engine_page)
         ttk.Label(back, text='Engine').pack(side='left')
         ttk.Combobox(back, textvariable=self.backend, values=['native', 'wsl', 'docker'],
                      state='readonly', width=10).pack(side='left', padx=8)
         self.environment_label = ttk.Label(back)
         self.environment_box = ttk.Combobox(back, textvariable=self.environment)
-        self.wsl_controls = ttk.Frame(body)
+        self.wsl_controls = ttk.Frame(self.engine_page)
         self.prepare_button = ttk.Button(self.wsl_controls, text='Prepare included tools', command=self.prepare_bundle)
         self.detect_wsl_button = ttk.Button(self.wsl_controls, text='Detect distributions', command=self.detect_wsl)
         self.detect_wsl_button.pack(side='left')
         self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
         if os.name == 'nt':
-            ttk.Button(body, text='Set up missing tools', command=self.open_tool_setup,
-                       style='Primary.TButton').pack(anchor='w', pady=(4, 6))
-        self.saved_toolkit_button = ttk.Button(body, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
+            ttk.Button(choice_row, text='Set up missing tools', command=self.open_tool_setup).pack(side='left')
+        self.saved_toolkit_button = ttk.Button(self.engine_page, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
 
-        self.preparation_status = ttk.Label(body, textvariable=self.wsl_status, style='Muted.TLabel',
-                                            wraplength=745)
-        self.preparation_status.pack(anchor='w')
+        self.preparation_status = ttk.Label(self.engine_page, textvariable=self.wsl_status, style='Muted.TLabel',
+                                            wraplength=760, justify='left')
+        self.preparation_status.pack(anchor='w', pady=4)
+        ttk.Label(body, textvariable=self.recommendation_text, wraplength=760, justify='left',
+                  style='Muted.TLabel').pack(anchor='w', pady=(0, 2))
         conf = self.confirm_row = ttk.Frame(body)
-        conf.pack(fill='x', pady=(6, 0))
+        conf.pack(fill='x', pady=(4, 0))
         ttk.Checkbutton(conf, text='I have permission for this exact target and check (remembered until scope changes).',
                         variable=self.auth).pack(anchor='w', pady=(0, 4))
-        ttk.Label(conf, text='For public websites or IPs, enter the host name or IP again to confirm permission.',
-                  wraplength=745).pack(anchor='w')
-        ttk.Entry(conf, textvariable=self.confirm, width=32).pack(anchor='w', pady=3)
+        confirm_line = ttk.Frame(conf)
+        confirm_line.pack(fill='x')
+        ttk.Label(confirm_line, text='Public target confirmation (hostname or IP)').pack(side='left', padx=(0, 6))
+        self.confirm_entry = ttk.Entry(confirm_line, textvariable=self.confirm, width=30)
+        self.confirm_entry.pack(side='left', fill='x', expand=True)
 
         action = ttk.Frame(shell, style='Canvas.TFrame')
-        action.pack(fill='x', pady=(8, 0))
+        action.pack(side='bottom', fill='x', pady=(4, 0), before=self.tabs)
         self.run_btn = ttk.Button(action, text='Start assessment', command=self.start, style='Primary.TButton')
         self.run_btn.pack(side='right')
         self.stop_btn = ttk.Button(action, text='Stop', command=self.stop, state='disabled')
         self.stop_btn.pack(side='right', padx=6)
         ttk.Label(action, textvariable=self.status, style='Canvas.TLabel', wraplength=500).pack(side='left', fill='x', expand=True)
         self.bar = ttk.Progressbar(shell, mode='indeterminate', style='Scan.Horizontal.TProgressbar')
-        self.bar.pack(fill='x', pady=(6, 0))
+        self.bar.pack(side='bottom', fill='x', pady=(2, 0), before=self.tabs)
         panes = ttk.Panedwindow(results, orient='horizontal')
         panes.pack(fill='both', expand=True)
         listing = ttk.Frame(panes, padding=6)
@@ -164,17 +163,16 @@ class ToolsWindow(tk.Toplevel):
         self.update_backend_controls()
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
 
+    def on_tab_changed(self, _event=None):
+        self.advanced.set(self.tabs.select() == str(self.engine_page))
+
     def update_backend_controls(self):
         kind = self.backend.get()
         self.recommend_button.state(['disabled'] if self.busy or self.wsl_busy else ['!disabled'])
-        if self.advanced.get():
-            if not self.backend_row.winfo_manager():
-                self.backend_row.pack(before=self.preparation_status, fill='x', pady=4)
-            if (self.bundled or os.name == 'nt') and not self.saved_toolkit_button.winfo_manager():
-                self.saved_toolkit_button.pack(before=self.preparation_status, anchor='w', pady=(2, 4))
-        else:
-            self.backend_row.pack_forget()
-            self.saved_toolkit_button.pack_forget()
+        if not self.backend_row.winfo_manager():
+            self.backend_row.pack(before=self.preparation_status, fill='x', pady=4)
+        if (self.bundled or os.name == 'nt') and not self.saved_toolkit_button.winfo_manager():
+            self.saved_toolkit_button.pack(before=self.preparation_status, anchor='w', pady=(2, 4))
         self.engine_hint.set({
             'native': 'Current setup: local executable (runs on this computer). No Kali needed.',
             'wsl': 'Current setup: Windows Linux environment. Stopping the Linux tool may take longer.',
@@ -196,9 +194,9 @@ class ToolsWindow(tk.Toplevel):
             self.prepare_button.state(['disabled'] if self.wsl_busy or self.busy else ['!disabled'])
         else:
             self.prepare_button.pack_forget()
-        if self.advanced.get() and (kind == 'wsl' or (self.bundled and kind == 'docker')):
+        if kind == 'wsl' or (self.bundled and kind == 'docker'):
             if not self.wsl_controls.winfo_manager():
-                self.wsl_controls.pack(before=self.confirm_row, fill='x', pady=(0, 4))
+                self.wsl_controls.pack(before=self.preparation_status, fill='x', pady=(0, 4))
         else:
             self.wsl_controls.pack_forget()
         self.detect_wsl_button.state(['disabled'] if kind != 'wsl' or self.wsl_busy or self.busy else ['!disabled'])
