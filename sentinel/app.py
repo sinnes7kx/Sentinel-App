@@ -268,7 +268,7 @@ class App(tk.Tk):
             self.busy=False; self.stop_btn.configure(state='disabled'); self.run_btn.configure(state='normal')
             if error:self.status.set('Assessment error: '+error)
             else:
-                sid=self.store.save(pid,result); self.project.set(name); self.project_box.configure(values=self.store.projects()); self.load_history(sid); self.status.set('Assessment '+result['status']+' • Saved locally.')
+                sid=self.store.save(pid,result); self.project.set(name); self.project_box.configure(values=self.store.projects()); self.load_history(sid); self.show_workspace('findings'); self.status.set('Assessment '+result['status']+' • Saved locally.')
         except Empty:pass
         except Exception as e:self.status.set('Local storage/UI error: '+type(e).__name__)
         self.poll_timer = self.after(100,self.poll)
