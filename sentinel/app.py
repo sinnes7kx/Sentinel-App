@@ -75,6 +75,7 @@ class App(tk.Tk):
             ('Project history', lambda: self.show_workspace('history'), 'Nav.TButton'),
             ('Security tools', self.open_network, 'Nav.TButton'),
             ('Dependencies', self.open_dependencies, 'Nav.TButton'),
+            ('CVE review', self.open_cve_review, 'Nav.TButton'),
             ('Local utilities', self.open_local_utilities, 'Nav.TButton'),
         ):
             button = ttk.Button(self.navigation, text=label, command=command, style=style)
@@ -287,6 +288,16 @@ class App(tk.Tk):
         window = self.children.get('guided_assessment')
         if window is None:
             window = GuidedWindow(self)
+        else:
+            window.deiconify()
+            window.lift()
+        return window
+
+    def open_cve_review(self):
+        from .cve_window import CVEWindow
+        window = self.children.get('cve_review')
+        if window is None:
+            window = CVEWindow(self)
         else:
             window.deiconify()
             window.lift()
