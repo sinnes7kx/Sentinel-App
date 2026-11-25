@@ -13,6 +13,14 @@ No separate Kali virtual machine is required for the managed Docker toolkit. Pyt
 
 The product name is **Sentinel**. The existing application data directory, project history and runtime identifiers are unchanged.
 
+## New to security testing?
+
+Start with **Website assessment** for an authorized site. You do not need an imported report or an extra tool. **Verification lab** includes local access-control and database experiments and a fixed XSS browser example. XSS practice opens a local HTML page; observe the weak and protected examples yourself. It does not automatically measure browser execution or check an external site.
+
+**CVE review** checks whether a known software problem in a supplied NVD JSON 2.0 advisory file might apply to your exact software version. **Try fake example** needs no file. Real matching requires the software identity and a downloaded advisory list.
+
+**Local utilities → Tool report review** reads a report already exported by ZAP (Traditional JSON), Nmap (XML) or Wireshark (packet-list CSV). Choose the saved report, not an installer or screenshot. **Try fake ZAP report** demonstrates the reader without a file. Sentinel does not yet run ZAP desktop scans. File integrity checks compare file fingerprints, not viruses.
+
 ## Local testing without GitHub Actions
 
 In a complete Windows source checkout, close Sentinel and double-click `Test_Sentinel.bat`. The launcher uses the same private Python environment as Sentinel, compiles the source and runs the local unittest regression suite (including Tk GUI tests). It saves the console results to a timestamped text file in `%LOCALAPPDATA%\Sentinel\test-logs`. Share the failing test names and traceback when reporting a problem; review the log before sharing.
