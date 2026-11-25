@@ -5,6 +5,7 @@ from queue import Queue, Empty
 from threading import Event
 
 from .access_lab import demonstrate
+from .database_lab import demonstrate_database
 from .desktop_theme import detail_box, scrollable
 from .orchestration import for_app
 from .ui_lifecycle import watch_poll, bind_escape
@@ -13,7 +14,7 @@ from .ui_lifecycle import watch_poll, bind_escape
 class AccessLabWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app, name='access_lab')
-        self.title('Sentinel | Access control lab')
+        self.title('Sentinel | Verification lab')
         self.geometry('760x490')
         self.minsize(650, 420)
         self.cancel = Event()
@@ -25,10 +26,14 @@ class AccessLabWindow(tk.Toplevel):
         self.bind('<Destroy>', lambda e: self.cancel.set() if e.widget is self else None, add='+')
         body = ttk.Frame(self, padding=10)
         body.pack(fill='both', expand=True)
-        ttk.Label(body, text='Can someone see a private record?', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(body, text='Run a real HTTP test against Sentinel’s temporary local practice server. '
-                  'It compares a deliberately weak example with a protected one using fake users and records.',
-                  wraplength=610, justify='left').pack(anchor='w', pady=(4, 8))
+        ttk.Label(body, text='Verify a security failure', style='Title.TLabel').pack(anchor='w')
+        self.kind = tk.StringVar(value='Access control')
+        self.selector = ttk.Combobox(body, textvariable=self.kind, state='readonly',
+                                     values=('Access control', 'Database input handling'))
+        self.selector.pack(anchor='w', fill='x', pady=(4, 4))
+        self.description = tk.StringVar(value='')
+        ttk.Label(body, textvariable=self.description, wraplength=610,
+                  justify='left').pack(anchor='w', pady=(4, 8))
         footer = ttk.Frame(body)
         footer.pack(side='bottom', fill='x', pady=(6, 0))
         self.status = tk.StringVar(value='Local practice only. No external target is contacted.')
@@ -51,9 +56,21 @@ class AccessLabWindow(tk.Toplevel):
         area.pack(fill='both', expand=True, pady=(8, 0))
         self.output = detail_box(area, height=7)
         scrollable(area, self.output)
-        self.say('WHY THIS MATTERS\nA website must check both who you are and whether you may see a particular record. '
-                 'Being signed in is not enough. Start the lab to compare the responses from a weak and a protected example.')
+        self.selector.bind('<<ComboboxSelected>>', self.change_kind)
+        self.change_kind()
         self.poll_timer = self.after(100, self.poll)
+
+    def change_kind(self, _event=None):
+        if self.busy:
+            return
+        self.tree.delete(*self.tree.get_children())
+        self.status.set('Local practice only. No external target is contacted.')
+        if self.kind.get() == 'Database input handling':
+            self.description.set('Run real SQLite queries against two synthetic records in memory. Compare unsafe SQL construction with bound parameters.')
+            self.say('WHY THIS MATTERS\nUser input should remain data, not become part of a database instruction. This experiment tests a normal record ID and a fixed unexpected expression.')
+        else:
+            self.description.set('Run real HTTP requests against a temporary local practice server with fake users and records.')
+            self.say('WHY THIS MATTERS\nA website must check both who you are and whether you may see a particular record. Being signed in is not enough.')
 
     def say(self, text):
         self.output.configure(state='normal')
@@ -66,8 +83,10 @@ class AccessLabWindow(tk.Toplevel):
             return
         self.cancel = Event()
         cancel, queue = self.cancel, self.queue
+        self.running_kind = self.kind.get()
+        operation = demonstrate_database if self.running_kind == 'Database input handling' else demonstrate
         try:
-            self.orchestrator.submit(lambda: demonstrate(cancel),
+            self.orchestrator.submit(lambda: operation(cancel),
                                      lambda result, error: queue.put((result, error)), cancel)
         except RuntimeError as exc:
             self.status.set(str(exc))
@@ -75,6 +94,7 @@ class AccessLabWindow(tk.Toplevel):
         self.busy = True
         self.tree.delete(*self.tree.get_children())
         self.start_button.configure(state='disabled')
+        self.selector.configure(state='disabled')
         self.stop.configure(state='normal')
         self.status.set('Running local practice test…')
 
@@ -86,10 +106,20 @@ class AccessLabWindow(tk.Toplevel):
         else:
             self.busy = False
             self.start_button.configure(state='normal')
+            self.selector.configure(state='readonly')
             self.stop.configure(state='disabled')
             if error or not result or result.get('status') != 'completed':
                 self.status.set('Practice test incomplete or cancelled.')
                 self.say('No conclusion. Run the local test again.')
+            elif self.running_kind == 'Database input handling':
+                for i, row in enumerate(result['rows']):
+                    def label(kind):
+                        return (str(row[kind + '_count']) + ' record(s)' +
+                                (' · second row' if row[kind + '_second_row'] else ''))
+                    self.tree.insert('', 'end', values=(row['scenario'], label('weak'), label('protected')),
+                                     tags=('owner' if i == 0 else 'failure',))
+                self.status.set('Practice test completed. In-memory database closed.')
+                self.say('CONFIRMED IN THE LAB\nThe unexpected input was interpreted as a SQL expression in the weak example and selected the second synthetic record. The parameterized version treated the input as data and returned no record.\n\nWHY IT MATTERS\nUnsafe query construction may let input change database behavior. This experiment does not establish login bypass or data exposure on a real website.\n\nHOW TO FIX\nUse parameterized queries, validate expected input types, and enforce authorization separately.')
             else:
                 for i, row in enumerate(result['rows']):
                     def label(kind):
