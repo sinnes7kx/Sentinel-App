@@ -8,7 +8,7 @@ from queue import Queue, Empty
 from pathlib import Path
 from .engine import Target, scan, compare
 from .standard_assessment import standard_scan
-from .store import Store
+from .store import Store, REMEDIATION_STATES
 from .dnscheck import domain_name
 import json
 from .report import html_report
@@ -36,6 +36,7 @@ class App(tk.Tk):
         self.queue = Queue()
         self.current = None
         self.current_id = None
+        self.history_project_id = None
         self.records = []
         self.busy = False
         self.cancel_event = Event()
@@ -54,6 +55,8 @@ class App(tk.Tk):
         self.highest = tk.StringVar(value='—')
         self.selection_title = tk.StringVar(value='Select a finding')
         self.selection_meta = tk.StringVar(value='Choose a row to inspect its evidence.')
+        self.remediation_state = tk.StringVar(value='Open')
+        self.remediation_updated = tk.StringVar(value='')
         header = ttk.Frame(self, padding=(16, 7), style='Header.TFrame')
         header.pack(fill='x')
         mark = tk.Canvas(header, width=18, height=18, bg='#0e1012', highlightthickness=0)
@@ -134,6 +137,15 @@ class App(tk.Tk):
                   wraplength=180, justify='left').pack(anchor='w', pady=(10, 5))
         ttk.Label(middle, textvariable=self.selection_meta, style='Muted.TLabel',
                   wraplength=175, justify='left').pack(anchor='w')
+        ttk.Label(middle, text='MANUAL REMEDIATION', style='Section.TLabel').pack(anchor='w', pady=(12, 4))
+        self.remediation_box = ttk.Combobox(middle, values=REMEDIATION_STATES,
+                                           textvariable=self.remediation_state, state='disabled', width=16)
+        self.remediation_box.pack(fill='x')
+        self.remediation_button = ttk.Button(middle, text='Save status', command=self.save_remediation,
+                                             state='disabled')
+        self.remediation_button.pack(fill='x', pady=(4, 0))
+        ttk.Label(middle, textvariable=self.remediation_updated, style='Muted.TLabel',
+                  wraplength=175, justify='left').pack(anchor='w', pady=(4, 0))
         actions = ttk.Frame(middle)
         actions.pack(side='bottom', fill='x')
         ttk.Label(actions, text='ASSESSMENT ACTIONS', style='Section.TLabel').pack(anchor='w', pady=(0, 8))
@@ -246,6 +258,7 @@ class App(tk.Tk):
         if self.busy:return
         try:pid=self.store.project(self.project.get())
         except ValueError as e:messagebox.showerror('Project',str(e));return
+        self.history_project_id = pid
         self.project_box.configure(values=self.store.projects()); self.records=self.store.history(pid); self.history.delete(*self.history.get_children())
         self.assessment_count.set(str(len(self.records)))
         for sid,r in self.records:self.history.insert('','end',iid=str(sid),values=(r['started'][:19].replace('T',' '),r['status']))
@@ -259,6 +272,10 @@ class App(tk.Tk):
         if s and int(s[0]) in dict(self.records):self.show(dict(self.records)[int(s[0])],int(s[0]))
     def reset_inspector(self, has_assessment):
         self.highest.set('—')
+        self.remediation_box.configure(state='disabled')
+        self.remediation_button.configure(state='disabled')
+        self.remediation_state.set('Open')
+        self.remediation_updated.set('')
         self.selection_title.set('Select a finding')
         self.selection_meta.set('Choose a row to inspect its evidence.')
         for button in self.result_buttons:
@@ -267,6 +284,7 @@ class App(tk.Tk):
     def show(self,r,sid):
         self.current = r
         self.current_id = sid
+        self.review_states = self.store.remediation(self.history_project_id, sid)
         self.findings.delete(*self.findings.get_children())
         self.reset_inspector(True)
         levels = {f['severity'].lower() for f in r['findings']}
@@ -294,6 +312,29 @@ class App(tk.Tk):
             self.selection_title.set(f['title'])
             self.selection_meta.set(' · '.join(filter(None, [f['severity'].title(), f.get('source'), 'Confidence: ' + f.get('confidence', 'unknown')])))
             self.set_detail(finding_detail(view))
+            self.remediation_box.configure(state='readonly')
+            self.remediation_button.configure(state='normal')
+            record = self.review_states.get(view.index, {})
+            self.remediation_state.set(record.get('state', 'Open'))
+            self.remediation_updated.set('Manual status · ' + record['updated'][:10] if record else 'Not reviewed. Status is not proof of a fix.')
+        else:
+            self.remediation_box.configure(state='disabled')
+            self.remediation_button.configure(state='disabled')
+
+    def save_remediation(self):
+        selection = self.findings.selection()
+        if not selection or self.current_id is None or selection[0] not in getattr(self, 'presented_findings', {}):
+            return
+        view = self.presented_findings[selection[0]]
+        try:
+            record = self.store.set_remediation(self.history_project_id, self.current_id, view.index,
+                                                self.remediation_state.get())
+        except ValueError as exc:
+            messagebox.showerror('Cannot save status', str(exc), parent=self)
+            return
+        self.review_states[view.index] = record
+        self.remediation_updated.set('Manual status · ' + record['updated'][:10])
+        self.status.set('Remediation status saved for selected observation. Evidence unchanged.')
     def export(self):
         if not self.current:messagebox.showinfo('Export','Select an assessment first.');return
         p=filedialog.asksaveasfilename(defaultextension='.html',filetypes=[('HTML report','*.html')],initialfile='sentinel-report.html')
