@@ -13,14 +13,14 @@ class ToolSetupWindow(tk.Toplevel):
         super().__init__(tools, name='tool_setup')
         self.tools = tools
         self.title('Sentinel | Automatic tool setup')
-        self.geometry('650x430')
+        self.geometry('680x500')
         self.minsize(560, 380)
         self.orchestrator = for_app(tools.app)
         self.queue = Queue()
         self.cancel = Event()
         self.busy = False
         self.status = tk.StringVar(value='Choose what Sentinel should prepare.')
-        self.choice = tk.StringVar(value='nmap' if tools.tool.id == 'nmap' else 'toolkit')
+        self.choice = tk.StringVar(value='all')
         watch_poll(self)
         bind_escape(self, self.close)
         self.protocol('WM_DELETE_WINDOW', self.close)
@@ -30,7 +30,8 @@ class ToolSetupWindow(tk.Toplevel):
         ttk.Label(body, text='Sentinel detects existing components and downloads missing ones. No VirtualBox or separate Kali installation is required.',
                   wraplength=565).pack(anchor='w', pady=(6, 12))
         self.options = []
-        for label, value in (('Nmap — native Windows', 'nmap'),
+        for label, value in (('Recommended — all supported components', 'all'),
+                             ('Nmap — native Windows', 'nmap'),
                              ('Docker Desktop — Linux runtime', 'docker'),
                              ('Kali toolkit — WhatWeb and sslscan via Docker', 'toolkit')):
             radio = ttk.Radiobutton(body, text=label, value=value, variable=self.choice)
@@ -41,7 +42,7 @@ class ToolSetupWindow(tk.Toplevel):
         self.button = ttk.Button(body, text='Detect and install missing components',
                                  style='Primary.TButton', command=self.start)
         self.button.pack(anchor='w')
-        ttk.Label(body, textvariable=self.status, wraplength=565).pack(anchor='w', pady=10)
+        ttk.Label(body, textvariable=self.status, wraplength=595, justify='left').pack(anchor='w', pady=10)
         self.poll_timer = self.after(100, self.poll)
 
     def start(self):
