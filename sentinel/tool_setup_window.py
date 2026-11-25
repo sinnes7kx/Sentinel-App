@@ -25,6 +25,7 @@ class ToolSetupWindow(tk.Toplevel):
         self.mode = None
         self.rows = []
         self.last_setup_kind = None
+        self.last_retry_allowed = False
         self.status = tk.StringVar(value='Choose what Sentinel should prepare.')
         self.choice = tk.StringVar(value='all')
         watch_poll(self)
@@ -122,7 +123,7 @@ class ToolSetupWindow(tk.Toplevel):
         for widget in [self.button, self.refresh_button, *self.options]:
             widget.state(['disabled'] if busy else ['!disabled'])
         self.cancel_button.configure(state='normal' if busy and self.mode == 'inventory' else 'disabled')
-        self.retry_button.state(['disabled'])
+        self.retry_button.state(['!disabled'] if not busy and self.last_retry_allowed else ['disabled'])
         self.selected()
 
     def retry_setup(self):
@@ -151,6 +152,7 @@ class ToolSetupWindow(tk.Toplevel):
             self.status.set(str(exc))
             return
         self.last_setup_kind = kind
+        self.last_retry_allowed = False
         self.mode = 'setup'
         self.recovery_title.set('')
         self.recovery_text.set('')
@@ -183,6 +185,7 @@ class ToolSetupWindow(tk.Toplevel):
                 advice = recovery(outcome)
                 self.recovery_title.set(advice.heading)
                 self.recovery_text.set(advice.instruction)
+                self.last_retry_allowed = advice.retry
                 self.retry_button.state(['!disabled'] if advice.retry else ['disabled'])
             if mode == 'setup' and not error and result and result.get('status') == 'completed':
                 if result.get('backend') == 'docker' and not self.tools.busy and not self.tools.wsl_busy and self.tools.tool.id in ('whatweb', 'sslscan'):
