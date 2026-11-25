@@ -12,8 +12,8 @@ MUTED = '#aaaab3'
 ACCENT = '#d8d8df'
 HEADER = '#121214'
 SELECT = '#36363d'
-SEVERITY_COLORS = {'critical': '#ff9da7', 'high': '#f4a39c',
-                   'medium': '#e9c08d', 'low': '#a8b9d1', 'info': MUTED}
+SEVERITY_COLORS = {'critical': '#ff6482', 'high': '#ff9060',
+                   'medium': '#f5cf55', 'low': '#65d6a0', 'info': '#78bdf9'}
 
 
 def _tile(root, fill, radius=9, outline=None):
@@ -81,6 +81,8 @@ def configure_theme(root):
     style.configure('Scan.Horizontal.TProgressbar', background=ACCENT, troughcolor=RAISED,
                     borderwidth=0, thickness=4, lightcolor=ACCENT, darkcolor=ACCENT)
     style.configure('Title.TLabel', font=('Segoe UI Semibold', 13))
+    for level, color in SEVERITY_COLORS.items():
+        style.configure(level + '.Title.TLabel', foreground=color)
     style.configure('Muted.TLabel', foreground=MUTED)
     style.configure('TEntry', padding=(8, 4), borderwidth=1, relief='flat')
     style.configure('TCombobox', padding=(8, 4), borderwidth=1, relief='flat',
@@ -99,7 +101,7 @@ def configure_theme(root):
                     borderwidth=0, relief='flat')
     style.configure('Treeview.Heading', background=PANEL, foreground=MUTED,
                     font=('Segoe UI Semibold', 9), padding=(8, 4), relief='flat', borderwidth=0)
-    style.map('Treeview', background=[('selected', SELECT)], foreground=[('selected', INK)])
+    style.map('Treeview', background=[('selected', SELECT)], foreground=[])
     style.map('Treeview.Heading', background=[('active', RAISED)])
     style.configure('Vertical.TScrollbar', troughcolor=SURFACE, background='#414147',
                     arrowsize=10, bordercolor=SURFACE, lightcolor=SURFACE, darkcolor=SURFACE,
