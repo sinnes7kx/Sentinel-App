@@ -1,4 +1,17 @@
-# Sentinel v0.5 development — assessment architecture
+# Sentinel
+
+Local-first security assessment software for authorized websites, networks and software dependencies.
+
+## Getting started
+
+1. Open Sentinel from the Windows installer, or double-click `Start_Sentinel.bat` in a source checkout. The source launcher prepares a private Python environment automatically.
+2. For basic website checks, enter your authorized website address in the main window. No external scanner is required.
+3. To prepare optional tools, open **Tool setup** and choose the recommended setup. Sentinel detects existing components and prepares missing ones after your approval. Follow any Windows or vendor prompts and retry after a restart if needed.
+4. In **Security tools**, select a check and use **Choose for me** to recommend an existing engine. Review the scope and permission before starting.
+
+No separate Kali virtual machine is required for the managed Docker toolkit. Python environments and container images still use local disk space. ZAP preparation and report review are available, but desktop ZAP scanning and automatic Nikto installation are not yet implemented.
+
+The product name is **Sentinel**. The existing application data directory, project history and runtime identifiers are unchanged.
 
 ## Windows offline installer (x64)
 
