@@ -96,7 +96,7 @@ class OfflineToolkitTests(unittest.TestCase):
     def test_docker_reports_stream_without_host_drive_mount(self):
         for spec, url, profile, output, flag in (
             (whatweb.SPEC, 'http://127.0.0.1', 'passive', '[{"plugins":{"Apache":{}}}]', '--log-json=/dev/stdout'),
-            (sslscan.SPEC, 'https://127.0.0.1', 'standard', '<ssltest><protocol type="tls" version="1.3" enabled="1"/></ssltest>', '--xml=-'),
+            (sslscan.SPEC, 'https://127.0.0.1', 'standard', '<ssltest><protocol type="tls" version="1.2" enabled="1"/><protocol type="tls" version="1.3" enabled="1"/></ssltest>', '--xml=-'),
         ):
             with self.subTest(spec=spec.id):
                 def invoke(cmd, timeout, cancel):

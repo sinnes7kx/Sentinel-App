@@ -35,10 +35,12 @@ def _records(text):
 
 def parse_json(text, private=False):
     out, seen = [], set()
-    for rec in _records(text):
-        if not isinstance(rec, dict):
-            continue
-        for name, info in (rec.get('plugins') or {}).items():
+    records = _records(text)
+    if not records or any(not isinstance(rec, dict) or not isinstance(rec.get('plugins'), dict)
+                          for rec in records):
+        raise ValueError('No complete WhatWeb plugin records.')
+    for rec in records:
+        for name, info in rec['plugins'].items():
             if name.lower() in NOISE or name in seen or not isinstance(info, dict):
                 continue
             seen.add(name)
@@ -53,7 +55,7 @@ def parse_json(text, private=False):
                                'Technology identified: ' + runner.clean(name, 40) + (' ' + runner.clean(', '.join(map(str, info['version'][:2])), 40).rstrip(',') if has_version else ''),
                                f'The site reveals {runner.clean(name, 40)}' + (f' ({detail})' if detail else '') + '.',
                                'Keep this software updated. Hiding exact version numbers (for example ServerTokens, expose_php=Off) makes it harder for attackers to pick known exploits, but it is not a substitute for patching.'))
-    return out[:MAX_ITEMS], {'technologies': len(out)}, ''
+    return out[:MAX_ITEMS], {'technologies': len(out)}, ('Only the first 40 findings are retained.' if len(out) > MAX_ITEMS else '')
 
 
 def build(binary, target, profile, outfile):
