@@ -76,6 +76,7 @@ class App(tk.Tk):
             ('Security tools', self.open_network, 'Nav.TButton'),
             ('Dependencies', self.open_dependencies, 'Nav.TButton'),
             ('CVE review', self.open_cve_review, 'Nav.TButton'),
+            ('Website mapper', self.open_site_map, 'Nav.TButton'),
             ('Verification lab', self.open_access_lab, 'Nav.TButton'),
             ('Local utilities', self.open_local_utilities, 'Nav.TButton'),
         ):
@@ -292,6 +293,16 @@ class App(tk.Tk):
         window = self.children.get('guided_assessment')
         if window is None:
             window = GuidedWindow(self)
+        else:
+            window.deiconify()
+            window.lift()
+        return window
+
+    def open_site_map(self):
+        from .site_map_window import SiteMapWindow
+        window = self.children.get('site_map')
+        if window is None:
+            window = SiteMapWindow(self)
         else:
             window.deiconify()
             window.lift()
