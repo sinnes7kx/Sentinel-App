@@ -17,7 +17,7 @@ def confirm_website(parent, target, profile, dns):
         parent=parent, default=messagebox.CANCEL)
 
 
-def confirm_tool(parent, tool, value, profile, backend):
+def confirm_tool(parent, tool, value, profile, backend, managed=None):
     """Return typed confirmation or None on cancellation. Preserve public-scope guard."""
     if tool.kind == 'web':
         target = Target.parse(value)
@@ -39,6 +39,10 @@ def confirm_tool(parent, tool, value, profile, backend):
         private = scope.private
     detail = ('Target: ' + display + '\nCheck: ' + tool.name +
               '\nProfile: ' + tool.profiles[profile].label + '\nEngine: ' + backend.kind)
+    if tool.id == 'web-checkup':
+        detail += '\nUses native tools when available.'
+        if managed is not None:
+            detail += '\nSaved Docker toolkit: ' + managed.environment + '\nCompatible WhatWeb and sslscan checks may run in Docker; container network access is not limited to the target.'
     if backend.environment:
         detail += '\nEnvironment: ' + backend.environment
     if backend.kind == 'wsl':

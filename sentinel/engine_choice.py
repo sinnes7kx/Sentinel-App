@@ -18,7 +18,7 @@ class Recommendation:
 
 def recommend(tool, value, native_detected, saved=None, docker_detected=False):
     if tool.id == 'web-checkup':
-        return Recommendation(Backend(), 'Use the built-in website checkup. Missing optional tools are skipped and reported.')
+        return Recommendation(Backend(), 'Use the website checkup. Native tools and the saved managed toolkit are selected when compatible; missing checks are reported.')
     if native_detected:
         return Recommendation(Backend(), 'Use the tool already installed on this computer. No separate Linux setup needed.')
     if tool.id not in ('whatweb', 'sslscan'):

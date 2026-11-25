@@ -15,6 +15,7 @@ from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
 from .tools import bundle, wsl
 from .tool_setup import saved_source_backend
 from .engine_choice import recommend
+from .tool_inventory import managed_backend
 import shutil
 import os
 
@@ -364,6 +365,9 @@ class ToolsWindow(tk.Toplevel):
     def update_tool_info(self):
         t = self.tool
         kind = self.backend.get()
+        if t.id == 'web-checkup':
+            self.info.set(t.blurb + '\nUses native tools first and a saved Docker toolkit for compatible checks. Open Tool setup to prepare or test the toolkit. Nikto requires a separate native installation.' + '\n' + t.note)
+            return
         if kind == 'native':
             availability = '' if t.installed() else '\nTool not found on this computer. Choose for me or Set up missing tools.'
         elif self.bundled and not self.environment.get().strip():
@@ -394,20 +398,34 @@ class ToolsWindow(tk.Toplevel):
         try:
             tool, value, prof = self.tool, self.target.get(), self.profile.get()
             if prof not in tool.profiles: raise ValueError('Unknown assessment profile.')
-            backend = Backend(self.backend.get(), self.environment.get().strip())
+            managed = None
+            if tool.id == 'web-checkup':
+                backend = Backend()
+                try:
+                    candidate = managed_backend()
+                    if candidate and candidate.kind == 'docker' and shutil.which('docker'):
+                        candidate.validate('sslscan')
+                        managed = candidate
+                except (OSError, ValueError, TypeError):
+                    pass
+            else:
+                backend = Backend(self.backend.get(), self.environment.get().strip())
             backend.validate(tool.id)
             if backend.kind == 'native' and not tool.installed(): raise ToolMissing(tool.install_hint)
             name = self.app.project.get()
             self.confirming = True
             try:
-                conf = confirm_tool(self, tool, value, prof, backend)
+                conf = (confirm_tool(self, tool, value, prof, backend, managed=managed)
+                        if tool.id == 'web-checkup' else confirm_tool(self, tool, value, prof, backend))
             finally:
                 self.confirming = False
             if conf is None: return
             pid = self.app.store.project(name)
         except ToolMissing as e:
-            if os.name == 'nt' and self.tool.id == 'nmap':
-                self.open_tool_setup()
+            if os.name == 'nt' and self.tool.id in ('nmap', 'whatweb', 'sslscan'):
+                window = self.open_tool_setup()
+                window.choice.set('nmap' if self.tool.id == 'nmap' else 'toolkit')
+                window.pages.select(window.install_page)
             else:
                 messagebox.showinfo('Tool needed', str(e), parent=self)
             return
@@ -436,7 +454,7 @@ class ToolsWindow(tk.Toplevel):
                             '. Open that Linux terminal and install the required packages. ' +
                             ('For Nmap: sudo apt update && sudo apt install nmap.' if tool.id == 'nmap'
                              else 'For Kali/Debian, use the package manager or Prepare included tools.')}
-            return tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict()
+            return tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {'managed': managed})).to_dict()
         try:
             self.job = self.orchestrator.submit(
                 operation,
