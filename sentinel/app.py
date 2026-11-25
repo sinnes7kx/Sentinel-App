@@ -152,6 +152,7 @@ class App(tk.Tk):
         self.remediation_page = ttk.Frame(self.workspace_tabs, padding=6)
         self.workspace_tabs.add(self.remediation_page, text='Remediation')
         self.build_checklist()
+        self.workspace_tabs.bind('<<NotebookTabChanged>>', self.workspace_tab_changed)
 
         self.findings = ttk.Treeview(self.findings_page, columns=('title', 'severity'), show='headings', height=8)
         self.findings.heading('severity', text='Risk')
@@ -264,7 +265,15 @@ class App(tk.Tk):
             self.finding_selected()
         else:
             self.findings.selection_remove(*self.findings.selection())
+            self.selection_title.set('Select a finding')
+            self.selection_meta.set('Choose a checklist row to inspect evidence.')
+            self.remediation_updated.set('')
+            self.set_detail('Select a remediation item to review the evidence and recommended fix.')
             self.finding_selected()
+
+    def workspace_tab_changed(self, _event=None):
+        if self.workspace_tabs.select() == str(self.remediation_page):
+            self.checklist_selected()
 
     def show_workspace(self, page):
         self.workspace_tabs.select({'history': self.history_page, 'remediation': self.remediation_page}.get(page, self.findings_page))
@@ -422,7 +431,8 @@ class App(tk.Tk):
             self.remediation_button.configure(state='disabled')
 
     def save_remediation(self):
-        selection = self.findings.selection()
+        selection = (self.checklist_tree.selection() if self.workspace_tabs.select() == str(self.remediation_page)
+                     else self.findings.selection())
         if not selection or self.current_id is None or selection[0] not in getattr(self, 'presented_findings', {}):
             return
         view = self.presented_findings[selection[0]]
