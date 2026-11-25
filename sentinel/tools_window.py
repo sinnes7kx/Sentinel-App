@@ -10,7 +10,8 @@ from .tools import TOOLS
 from .tools.base import ToolMissing, parse_scope
 from .tools.scope import require_authorization
 from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
-from .tools import wsl
+from .tools import bundle, wsl
+import os
 
 DEFAULTS = {'net': '192.168.1.1', 'web': 'https://'}
 LABELS = {'net': 'Target: an IP address, a host name, or a home/office network such as 192.168.1.0/24',
@@ -30,6 +31,15 @@ class ToolsWindow(tk.Toplevel):
         self.backend = tk.StringVar(value='native'); self.environment = tk.StringVar()
         self.environment_values = {'wsl': '', 'docker': ''}
         self.active_backend = 'native'
+        self.bundled = os.name == 'nt' and (bundle.PAYLOAD / 'rootfs.sha256').is_file()
+        if self.bundled:
+            preferred = bundle.saved_backend()
+            self.backend.set(preferred.kind)
+            self.active_backend = preferred.kind
+            self.environment.set(preferred.environment)
+            self.environment_values[preferred.kind] = preferred.environment
+            self.tool = next(tool for tool in TOOLS if tool.id == 'whatweb')
+            self.tool_name.set(self.tool.name)
         self.wsl_names = []
         self.wsl_status = tk.StringVar()
         self.wsl_queue = Queue()
@@ -53,6 +63,7 @@ class ToolsWindow(tk.Toplevel):
         self.environment_label = ttk.Label(back)
         self.environment_box = ttk.Combobox(back, textvariable=self.environment)
         self.wsl_controls = ttk.Frame(body)
+        self.prepare_button = ttk.Button(self.wsl_controls, text='Prepare included tools', command=self.prepare_bundle)
         self.detect_wsl_button = ttk.Button(self.wsl_controls, text='Detect distributions', command=self.detect_wsl)
         self.detect_wsl_button.pack(side='left')
         self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
@@ -80,7 +91,7 @@ class ToolsWindow(tk.Toplevel):
 
     def update_backend_controls(self):
         kind = self.backend.get()
-        self.environment_label.configure(text={'native': '', 'wsl': 'Distribution', 'docker': 'Image digest'}[kind])
+        self.environment_label.configure(text={'native': '', 'wsl': 'Distribution', 'docker': 'Image ID or digest'}[kind])
         self.environment_box.configure(values=self.wsl_names if kind == 'wsl' else (),
                                        state='disabled' if self.wsl_busy else 'normal')
         if kind == 'native':
@@ -89,7 +100,12 @@ class ToolsWindow(tk.Toplevel):
         elif not self.environment_box.winfo_manager():
             self.environment_label.pack(side='left', padx=(0, 6))
             self.environment_box.pack(side='left', fill='x', expand=True)
-        if kind == 'wsl':
+        if self.bundled and kind in ('wsl', 'docker'):
+            self.prepare_button.pack(side='right')
+            self.prepare_button.state(['disabled'] if self.wsl_busy or self.busy else ['!disabled'])
+        else:
+            self.prepare_button.pack_forget()
+        if kind == 'wsl' or (self.bundled and kind == 'docker'):
             if not self.wsl_controls.winfo_manager():
                 self.wsl_controls.pack(before=self.confirm_row, fill='x', pady=(0, 4))
         else:
@@ -108,7 +124,21 @@ class ToolsWindow(tk.Toplevel):
 
     def environment_changed(self, *_):
         self.wsl_status.set('')
+        self.update_tool_info()
         self.update_backend_controls()
+
+    def prepare_bundle(self):
+        kind = self.backend.get()
+        if not self.bundled or kind not in ('wsl', 'docker'):
+            return
+        def provision(_cancel):
+            try:
+                backend = bundle.prepare(kind)
+                bundle.remember(backend, bundle.preference_path())
+            except OSError as exc:
+                raise ValueError(f'Toolkit setup could not access a local file ({exc.strerror}).') from exc
+            return backend.environment
+        self.start_wsl_probe('prepare', kind, provision)
 
     def detect_wsl(self):
         self.start_wsl_probe('list', '', lambda _cancel: wsl.distributions())
@@ -118,7 +148,7 @@ class ToolsWindow(tk.Toplevel):
         self.start_wsl_probe('tools', name, lambda cancel: wsl.available_tools(name, cancel))
 
     def start_wsl_probe(self, action, name, operation):
-        if self.busy or self.wsl_busy or self.backend.get() != 'wsl':
+        if self.busy or self.wsl_busy or (action != 'prepare' and self.backend.get() != 'wsl'):
             return
         queue = self.wsl_queue
         cancel = self.wsl_cancel = Event()
@@ -137,7 +167,7 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_busy = True
         self.run_btn.state(['disabled'])
         self.update_backend_controls()
-        self.wsl_status.set('Checking WSL…')
+        self.wsl_status.set('Preparing the included Kali tools…' if action == 'prepare' else 'Checking WSL…')
 
     def poll_wsl_probe(self):
         try:
@@ -147,11 +177,14 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_busy = False
         self.run_btn.state(['!disabled'])
         self.update_backend_controls()
-        if self.backend.get() != 'wsl':
+        if self.backend.get() != (name if action == 'prepare' else 'wsl'):
             return
         error = error or result.get('error')
         if error:
             self.wsl_status.set(error)
+        elif action == 'prepare':
+            self.environment.set(result['values'])
+            self.wsl_status.set('Ready · WhatWeb and sslscan')
         elif action == 'list':
             self.wsl_names = result['values']
             if self.wsl_names and self.environment.get().strip() not in self.wsl_names:
@@ -189,6 +222,8 @@ class ToolsWindow(tk.Toplevel):
         kind = self.backend.get()
         if kind == 'native':
             availability = '' if t.installed() else '\nTool is missing locally. Press Start for installation details.'
+        elif self.bundled and not self.environment.get().strip():
+            availability = '\nChoose Prepare included tools for WhatWeb and sslscan. WSL setup may request administrator access and a restart.'
         elif t.id not in SUPPORTED:
             availability = '\nSelect Nmap, sslscan, or WhatWeb to use this backend.'
         else:

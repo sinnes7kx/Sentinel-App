@@ -25,9 +25,26 @@ def configure_theme(root):
     style.configure('.', font=('Segoe UI', 10), background=PANEL, foreground=INK,
                     fieldbackground=SURFACE, bordercolor=LINE, lightcolor=LINE,
                     darkcolor=LINE, arrowcolor=MUTED, insertcolor=INK, focuscolor=ACCENT)
+    # A nine-slice surface lets Tk resize the card without scaling its corners.
+    radius = 10
+    tile = tk.PhotoImage(master=root, width=2 * radius, height=2 * radius)
+    for y in range(2 * radius):
+        for x in range(2 * radius):
+            distance = ((x + .5 - radius) ** 2 + (y + .5 - radius) ** 2) ** .5
+            tile.put(PANEL if distance <= radius else CANVAS, to=(x, y))
+    root.panel_tile = tile
+    style.element_create('Card.surface', 'image', tile, border=radius, sticky='nsew')
+    style.layout('Card.TFrame', [('Card.surface', {'sticky': 'nsew'})])
+    style.configure('Card.TFrame', background=PANEL)
+    style.configure('Sash', sashthickness=8, gripcount=0)
+    style.configure('TPanedwindow', background=CANVAS)
     style.configure('Canvas.TFrame', background=CANVAS)
     style.configure('Canvas.TLabel', background=CANVAS, foreground=MUTED)
-    style.configure('Brand.TLabel', background=CANVAS, foreground=ACCENT, font=('Segoe UI', 19, 'bold'))
+    style.configure('Header.TFrame', background='#0e1012')
+    style.configure('Brand.TLabel', background='#0e1012', foreground=INK, font=('Segoe UI', 12, 'bold'))
+    style.configure('Section.TLabel', foreground=MUTED, font=('Segoe UI', 9, 'bold'))
+    style.configure('Scan.Horizontal.TProgressbar', background=ACCENT, troughcolor=RAISED,
+                    borderwidth=0, thickness=3, lightcolor=ACCENT, darkcolor=ACCENT)
     style.configure('Title.TLabel', font=('Segoe UI', 13, 'bold'))
     style.configure('Muted.TLabel', foreground=MUTED)
     style.configure('TEntry', padding=6)

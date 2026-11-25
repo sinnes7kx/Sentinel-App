@@ -11,7 +11,7 @@ INSTALL_HINT = ('sslscan is not installed. On Kali/Debian/Ubuntu run: sudo apt i
                 'On Windows use WSL or run Sentinel on Kali.')
 
 PROFILES = {'standard': Profile('standard', 'Standard', 'Connects several times to list every protocol and cipher the server accepts.',
-                                (), 300, 'protocols, ciphers, certificate, Heartbleed, compression, renegotiation')}
+                                (), 300, 'protocols, ciphers, certificate, compression, renegotiation')}
 FIX_TLS = 'Disable old protocol versions in the web server or load balancer and offer TLS 1.2 and TLS 1.3 only.'
 
 
@@ -112,9 +112,9 @@ def _parse(text, private):
 def build(binary, target, profile, outfile):
     address = target.connect_host or target.host
     host = '[%s]' % address if ':' in address else address
-    return [binary, '--no-colour', '--sni-name=' + target.host, '--xml=' + outfile, f'{host}:{target.port}']
+    return [binary, '--no-colour', '--no-heartbleed', '--sni-name=' + target.host, '--xml=' + outfile, f'{host}:{target.port}']
 
 
 SPEC = ToolSpec('sslscan', 'sslscan TLS check', 'Checks the encryption settings and certificate of an HTTPS site.', 'web',
                 ('sslscan',), INSTALL_HINT, PROFILES, build, _parse, outfile='.xml', schemes=('https',),
-                note='Makes multiple TLS probes, including Heartbleed and renegotiation checks; it does not send HTTP requests.')
+                note='Makes multiple TLS probes, including cipher and renegotiation checks; it does not send HTTP requests.')
