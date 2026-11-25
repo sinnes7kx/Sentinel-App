@@ -24,3 +24,22 @@ def watch_poll(window):
                 except tk.TclError:
                     pass
     window.bind('<Destroy>', destroyed, add='+')
+
+
+def watch_authorized_scope(window, variables, authorization):
+    """Keep explicit permission only while the exact UI scope stays unchanged.
+
+    Same-value writes (e.g. refreshing the current project after a scan) are
+    not scope changes. Once a value changes, returning to the old value does
+    not restore permission. The checkbox is always user-revocable.
+    """
+    previous = tuple(variable.get() for variable in variables)
+
+    def changed(*_):
+        nonlocal previous
+        current = tuple(variable.get() for variable in variables)
+        if current != previous:
+            previous = current
+            authorization.set(False)
+
+    watch_variables(window, variables, changed)
