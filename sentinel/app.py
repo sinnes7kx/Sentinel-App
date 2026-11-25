@@ -13,6 +13,7 @@ from .dnscheck import domain_name
 import json
 from .report import html_report
 from .finding_views import finding_views, finding_detail, findings_summary
+from .retest_review import review, review_text
 
 
 class DesktopUnavailable(RuntimeError):
@@ -137,7 +138,7 @@ class App(tk.Tk):
         actions.pack(side='bottom', fill='x')
         ttk.Label(actions, text='ASSESSMENT ACTIONS', style='Section.TLabel').pack(anchor='w', pady=(0, 8))
         self.result_buttons = []
-        for label, command in [('Compare previous', self.diff), ('Export HTML', self.export),
+        for label, command in [('Compare previous', self.diff), ('Retest evidence', self.retest_evidence), ('Export HTML', self.export),
                                ('Export JSON', self.export_json)]:
             button = ttk.Button(actions, text=label, command=command, state='disabled')
             button.pack(fill='x', pady=(0, 5))
@@ -305,6 +306,19 @@ class App(tk.Tk):
         if p:
             try:Path(p).write_text(json.dumps(self.current,indent=2,ensure_ascii=False),encoding='utf-8'); self.status.set('JSON report exported.')
             except OSError:messagebox.showerror('Export','Could not write the selected file.')
+    def retest_evidence(self):
+        if not self.current or self.current_id is None:
+            return
+        previous = next((r for sid, r in self.records
+                         if sid < self.current_id
+                         and r['target'] == self.current['target']
+                         and r.get('profile') == self.current.get('profile')
+                         and r.get('dns_domain', '') == self.current.get('dns_domain', '')), None)
+        if previous is None:
+            self.set_detail('No earlier assessment of the same URL, profile and DNS scope.')
+            return
+        self.set_detail(review_text(review(previous, self.current)))
+
     def diff(self):
         if not self.current:return
         prev=next((r for sid,r in self.records if sid<self.current_id and r['target']==self.current['target'] and r.get('profile','web-v1')==self.current.get('profile','web-v1') and r.get('dns_domain','')==self.current.get('dns_domain','')),None)
