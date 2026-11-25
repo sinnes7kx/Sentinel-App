@@ -47,7 +47,11 @@ class ApplicationTests(unittest.TestCase):
                     self.assertIs(tools.orchestrator, app.orchestrator)
                     tools.auth.set(True); tools.target.set('127.0.0.1')
                     self.assertFalse(tools.auth.get())
+                    tools.auth.set(True)
+                    tools.target.set(tools.target.get())
+                    self.assertTrue(tools.auth.get())
                     tools.backend.set('wsl')
+                    self.assertFalse(tools.auth.get())
                     with patch('sentinel.tools_window.wsl.distributions', return_value=['kali-linux', 'Debian']):
                         tools.detect_wsl()
                         deadline = time.monotonic() + 5
@@ -87,6 +91,32 @@ class ApplicationTests(unittest.TestCase):
                     app.findings.selection_set(app.findings.get_children()[0])
                     app.finding_selected()
                     self.assertEqual(app.selection_title.get(), records[0][1]['findings'][0]['title'])
+                    self.assertTrue(app.auth.get(), 'Unchanged scope retains explicit permission')
+                    app.run()  # No second checkbox interaction.
+                    deadline = time.monotonic() + 6
+                    while app.busy and time.monotonic() < deadline:
+                        app.update(); time.sleep(.01)
+                    self.assertFalse(app.busy)
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
+                    self.assertTrue(app.auth.get())
+                    app.assessment_profile.set('Standard')
+                    self.assertFalse(app.auth.get())
+                    app.assessment_profile.set('Quick')
+                    self.assertFalse(app.auth.get(), 'Returning to old scope must not restore permission')
+                    app.auth.set(True)
+                    app.dns.set('fixture.invalid')
+                    self.assertFalse(app.auth.get())
+                    app.dns.set('')
+                    app.auth.set(True)
+                    app.project.set('Another project')
+                    self.assertFalse(app.auth.get())
+                    app.project.set('My website')
+                    app.auth.set(True)
+                    app.auth.set(False)  # Explicit revocation.
+                    with patch('sentinel.app.messagebox.showerror') as error:
+                        app.run()
+                        error.assert_called_once()
+                    self.assertFalse(app.busy)
                     utilities = app.open_local_utilities()
                     utilities.withdraw()
                     self.assertIs(utilities.orchestrator, app.orchestrator)
@@ -107,7 +137,7 @@ class ApplicationTests(unittest.TestCase):
                     while utilities.busy and time.monotonic() < deadline:
                         app.update(); time.sleep(.01)
                     self.assertIn('Packets in export  1', utilities.report_output.get('1.0', 'end'))
-                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 1)
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
                 finally:
                     app.cancel_event.set(); app.orchestrator.shutdown(); app.store.close(); app.destroy()
                     app.orchestrator.worker.join(3)
