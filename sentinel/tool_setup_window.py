@@ -5,7 +5,7 @@ from queue import Queue, Empty
 from threading import Event
 from .orchestration import for_app
 from .ui_lifecycle import watch_poll, bind_escape
-from .tool_setup import setup
+from .verified_setup import prepare_verified
 from .tool_inventory import snapshot
 from .desktop_theme import scrollable
 from .setup_recovery import recovery
@@ -179,7 +179,7 @@ class ToolSetupWindow(tk.Toplevel):
         cancel, queue = self.cancel, self.queue
         def operation():
             try:
-                return setup(kind, cancel)
+                return prepare_verified(kind, cancel)
             except ValueError as exc:
                 return {'status': 'failed', 'message': str(exc)}
         try:
@@ -195,7 +195,7 @@ class ToolSetupWindow(tk.Toplevel):
         self.recovery_text.set('')
         self.retry_button.state(['disabled'])
         self.set_busy(True)
-        self.status.set('Preparing selected components. Complete any vendor prompts that appear.')
+        self.status.set('Preparing and verifying selected components. Complete any vendor prompts that appear.')
 
     def poll(self):
         try:
@@ -234,12 +234,22 @@ class ToolSetupWindow(tk.Toplevel):
                 self.recovery_text.set(advice.instruction)
                 self.last_retry_allowed = advice.retry
                 self.retry_button.state(['!disabled'] if advice.retry else ['disabled'])
+            if mode == 'setup' and not error and result and 'verification' in result:
+                self.rows = [row for row in self.rows if row['name'] not in ('whatweb', 'sslscan')]
+                self.rows.extend(result['verification'].get('rows', []))
+                self.tree.delete(*self.tree.get_children())
+                for i, row in enumerate(self.rows):
+                    self.tree.insert('', 'end', iid=str(i), values=(row['name'], row['state']))
+                self.selected()
+                if result.get('status') == 'completed':
+                    self.pages.select(self.inventory_page)
             if mode == 'setup' and not error and result and result.get('status') == 'completed':
                 if result.get('backend') == 'docker' and not self.tools.busy and not self.tools.wsl_busy and self.tools.tool.id in ('whatweb', 'sslscan'):
                     self.tools.backend.set('docker')
                     self.tools.environment.set(result['environment'])
                 self.tools.update_tool_info()
-                self.detail.set('Setup completed. Refresh status to inspect the updated inventory.')
+                self.detail.set('Setup completed. Offline tool versions checked; scan connectivity is not verified.'
+                                if result.get('verification') else 'Setup completed. Refresh status to inspect the updated inventory.')
         self.poll_timer = self.after(100, self.poll)
 
     def close(self):
