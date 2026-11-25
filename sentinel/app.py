@@ -58,7 +58,8 @@ class App(tk.Tk):
         mark.create_oval(7, 7, 10, 10, fill='#eef3f5', outline='')
         ttk.Label(header, text='SENTINEL', style='Brand.TLabel').pack(side='left')
         for label, command in [('Local utilities', self.open_local_utilities),
-                               ('Dependencies', self.open_dependencies), ('Security tools', self.open_network)]:
+                               ('Dependencies', self.open_dependencies), ('Security tools', self.open_network),
+                               ('New assessment', self.open_guided)]:
             ttk.Button(header, text=label, command=command).pack(side='right', padx=(6, 0))
 
         workspace = ttk.Frame(self, padding=(12, 12), style='Canvas.TFrame')
@@ -166,6 +167,16 @@ class App(tk.Tk):
         self.detail.configure(width=26)
         scrollable(detail, self.detail)
         self.set_detail('Run an assessment or open project history to inspect findings.')
+
+    def open_guided(self):
+        from .guided_window import GuidedWindow
+        window = self.children.get('guided_assessment')
+        if window is None:
+            window = GuidedWindow(self)
+        else:
+            window.deiconify()
+            window.lift()
+        return window
 
     def open_local_utilities(self):
         from .local_window import LocalUtilitiesWindow

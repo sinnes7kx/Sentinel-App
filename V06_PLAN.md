@@ -1,0 +1,22 @@
+# Sentinel v0.6 — guided assessment and unified engine plan
+
+Product goal: beginner-friendly on the surface, professional underneath. Windows users should not need to learn Kali commands to perform real, authorized security assessments. Use the existing Tkinter, SQLite, scope, orchestration and evidence layers.
+
+## First increment (this branch)
+
+- New assessment opens a guided desktop entry point for the existing quick website, security tools and dependency workflows.
+- Local inventory distinguishes detected executable/client presence from verified readiness. No binary launch, installation, network request, or image pull occurs during inventory.
+- Existing authorization, target handling, scan profiles, reports and history remain unchanged.
+- Adds unit tests for optional tools absent/present and honest readiness labels.
+
+## Next increments and release gates
+
+1. Add bounded and cancellable runtime health checks for Docker/WSL and pinned tool versions. Separate approval for provisioning. Never quietly downgrade or widen scope.
+2. Address Windows process-tree termination and enforced network egress before broadening active coverage. Test redirect, DNS rebinding, cancellation and incomplete coverage with isolated fixtures.
+3. Add a reviewable assessment plan: plain-language objective, target, checks, backend, coverage gaps and authorization. Only enable execution for validated compatible combinations. Retain evidence provenance, severity separate from confidence, and retesting.
+4. Polish desktop navigation, setup and installer. Benchmark older Windows systems with 16 GB RAM; keep a native-only path.
+5. After these gates, integrate ZAP in an isolated practice environment, then local dependency, code and container security engines. Add further tools only with versioned tests, license review and useful remediation.
+
+Learning Lab: intentionally vulnerable local fixtures, isolated from unrelated systems. No simulated findings in real assessments. No unattended exploitation or arbitrary tool flags in the beginner flow. Free remains genuinely useful; defer Pro/Business licensing and payment until stable.
+
+Verification: new tests supplied, but this connector-only change has not been run on Windows or in a live Docker/WSL environment. No claim of complete v0.6 or new vulnerability coverage.
