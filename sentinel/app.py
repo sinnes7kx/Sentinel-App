@@ -16,6 +16,7 @@ import os
 from .report import html_report
 from .finding_views import finding_views, finding_detail, findings_summary
 from .retest_review import review, review_text
+from .remediation_checklist import checklist, counts, filtered, FILTERS
 
 
 class DesktopUnavailable(RuntimeError):
@@ -69,6 +70,7 @@ class App(tk.Tk):
         for label, command, style in (
             ('New assessment', self.open_guided, 'Primary.TButton'),
             ('Findings', lambda: self.show_workspace('findings'), 'Nav.TButton'),
+            ('Remediation', lambda: self.show_workspace('remediation'), 'Nav.TButton'),
             ('Project history', lambda: self.show_workspace('history'), 'Nav.TButton'),
             ('Security tools', self.open_network, 'Nav.TButton'),
             ('Dependencies', self.open_dependencies, 'Nav.TButton'),
@@ -147,6 +149,10 @@ class App(tk.Tk):
         self.history_page = ttk.Frame(self.workspace_tabs, padding=6)
         self.workspace_tabs.add(self.findings_page, text='Findings')
         self.workspace_tabs.add(self.history_page, text='History')
+        self.remediation_page = ttk.Frame(self.workspace_tabs, padding=6)
+        self.workspace_tabs.add(self.remediation_page, text='Remediation')
+        self.build_checklist()
+        self.workspace_tabs.bind('<<NotebookTabChanged>>', self.workspace_tab_changed)
 
         self.findings = ttk.Treeview(self.findings_page, columns=('title', 'severity'), show='headings', height=8)
         self.findings.heading('severity', text='Risk')
@@ -206,8 +212,74 @@ class App(tk.Tk):
         scrollable(detail, self.detail)
         self.set_detail('Run an assessment or open project history to inspect findings.')
 
+    def build_checklist(self):
+        page = self.remediation_page
+        self.checklist_filter = tk.StringVar(value='All')
+        self.checklist_summary = tk.StringVar(value='Select a saved assessment.')
+        toolbar = ttk.Frame(page)
+        toolbar.pack(fill='x', pady=(0, 4))
+        ttk.Label(toolbar, text='Status').pack(side='left', padx=(0, 4))
+        select = ttk.Combobox(toolbar, textvariable=self.checklist_filter, values=FILTERS,
+                              state='readonly', width=17)
+        select.pack(side='left', fill='x', expand=True)
+        select.bind('<<ComboboxSelected>>', lambda event: self.refresh_checklist())
+        ttk.Label(page, textvariable=self.checklist_summary, wraplength=270,
+                  justify='left', style='Muted.TLabel').pack(anchor='w', pady=(0, 4))
+        ttk.Label(page, text='Manual progress only; retest to verify.',
+                  style='Muted.TLabel').pack(anchor='w', pady=(0, 3))
+        table = ttk.Frame(page)
+        table.pack(fill='both', expand=True)
+        self.checklist_tree = ttk.Treeview(table, columns=('risk', 'title', 'state'),
+                                          show='headings', selectmode='browse', height=7)
+        for column, title, width in (('risk', 'Risk', 65), ('title', 'Finding', 120), ('state', 'Status', 120)):
+            self.checklist_tree.heading(column, text=title)
+            self.checklist_tree.column(column, width=width, minwidth=45, stretch=column != 'risk')
+        for severity, color in SEVERITY_COLORS.items():
+            self.checklist_tree.tag_configure(severity, foreground=color)
+        scrollable(table, self.checklist_tree)
+        self.checklist_tree.bind('<<TreeviewSelect>>', self.checklist_selected)
+
+    def refresh_checklist(self):
+        tree = self.checklist_tree
+        selected = tree.selection()
+        tree.delete(*tree.get_children())
+        rows = checklist(self.current, getattr(self, 'review_states', {}))
+        totals = counts(rows)
+        self.checklist_summary.set(
+            f"{totals['Open']} open · {totals['Investigating']} investigating\n"
+            f"{totals['Remediation applied']} applied · {totals['Retest required']} retest required"
+            if self.current is not None else 'Select a saved assessment.')
+        for row in filtered(rows, self.checklist_filter.get()):
+            title = row.title + (f' ({row.occurrences})' if row.occurrences > 1 else '')
+            tree.insert('', 'end', iid=str(row.index), values=(row.severity.upper(), title, row.state),
+                        tags=(row.severity.lower(),))
+        if selected and tree.exists(selected[0]):
+            tree.selection_set(selected[0])
+
+    def checklist_selected(self, _event=None):
+        if self.workspace_tabs.select() != str(self.remediation_page):
+            return
+        selected = self.checklist_tree.selection()
+        if selected and self.findings.exists(selected[0]):
+            self.findings.selection_set(selected[0])
+            self.finding_selected()
+        else:
+            self.findings.selection_remove(*self.findings.selection())
+            self.selection_title.set('Select a finding')
+            self.selection_meta.set('Choose a checklist row to inspect evidence.')
+            self.remediation_updated.set('')
+            self.set_detail('Select a remediation item to review the evidence and recommended fix.')
+            self.finding_selected()
+
+    def workspace_tab_changed(self, _event=None):
+        if self.workspace_tabs.select() == str(self.remediation_page):
+            self.checklist_selected()
+
     def show_workspace(self, page):
-        self.workspace_tabs.select(self.history_page if page == 'history' else self.findings_page)
+        self.workspace_tabs.select({'history': self.history_page, 'remediation': self.remediation_page}.get(page, self.findings_page))
+        if page == 'remediation':
+            self.refresh_checklist()
+            self.checklist_selected()
 
     def open_guided(self):
         from .guided_window import GuidedWindow
@@ -301,7 +373,7 @@ class App(tk.Tk):
             sid=select_id or self.records[0][0]; self.history.selection_set(str(sid)); self.show(dict(self.records)[sid],sid)
         else:
             self.reset_inspector(False)
-            self.current=None; self.current_id=None; self.summary.set('No assessment selected'); self.observation_count.set('—'); self.findings.delete(*self.findings.get_children()); self.set_detail('Run an authorized assessment to begin.')
+            self.current=None; self.current_id=None; self.review_states = {}; self.refresh_checklist(); self.summary.set('No assessment selected'); self.observation_count.set('—'); self.findings.delete(*self.findings.get_children()); self.set_detail('Run an authorized assessment to begin.')
     def history_selected(self,event=None):
         s=self.history.selection()
         if s and int(s[0]) in dict(self.records):self.show(dict(self.records)[int(s[0])],int(s[0]))
@@ -320,6 +392,8 @@ class App(tk.Tk):
         self.current = r
         self.current_id = sid
         self.review_states = self.store.remediation(self.history_project_id, sid)
+        self.checklist_tree.selection_remove(*self.checklist_tree.selection())
+        self.refresh_checklist()
         self.findings.delete(*self.findings.get_children())
         self.reset_inspector(True)
         levels = {f['severity'].lower() for f in r['findings']}
@@ -357,7 +431,8 @@ class App(tk.Tk):
             self.remediation_button.configure(state='disabled')
 
     def save_remediation(self):
-        selection = self.findings.selection()
+        selection = (self.checklist_tree.selection() if self.workspace_tabs.select() == str(self.remediation_page)
+                     else self.findings.selection())
         if not selection or self.current_id is None or selection[0] not in getattr(self, 'presented_findings', {}):
             return
         view = self.presented_findings[selection[0]]
@@ -368,6 +443,9 @@ class App(tk.Tk):
             messagebox.showerror('Cannot save status', str(exc), parent=self)
             return
         self.review_states[view.index] = record
+        self.refresh_checklist()
+        if self.workspace_tabs.select() == str(self.remediation_page):
+            self.checklist_selected()
         self.remediation_updated.set('Manual status · ' + record['updated'][:10])
         self.status.set('Remediation status saved for selected observation. Evidence unchanged.')
     def export(self):
