@@ -33,18 +33,18 @@ class OfflineToolkitTests(unittest.TestCase):
         def docker(argv, timeout=90):
             nonlocal imported
             history.append(argv)
-            if argv[1:3] == ['image', 'inspect']:
+            if argv[3:5] == ['image', 'inspect']:
                 return (0, self.image + ' ' + self.digest) if imported else (1, '')
-            if argv[1:3] == ['image', 'import']:
+            if argv[3:5] == ['image', 'import']:
                 self.assertIn(str(self.archive), argv)
                 imported = True
             return 0, ''
         with patch.object(bundle, 'call', side_effect=docker):
             for _ in range(2):
                 self.assertEqual(bundle.prepare('docker', self.payload), Backend('docker', self.image))
-        self.assertEqual(sum(cmd[1:3] == ['image', 'import'] for cmd in history), 1)
+        self.assertEqual(sum(cmd[3:5] == ['image', 'import'] for cmd in history), 1)
         self.assertTrue(all('--pull=never' in cmd and '--network=none' in cmd
-                            for cmd in history if cmd[1] == 'run'))
+                            for cmd in history if cmd[3] == 'run'))
 
     def test_refuses_conflicting_local_tag(self):
         with patch.object(bundle, 'call', return_value=(0, self.image + ' different')):
