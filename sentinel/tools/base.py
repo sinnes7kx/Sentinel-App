@@ -107,6 +107,8 @@ def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=
     coverage = {'tool': spec.id, 'profile': prof.label, 'checks': prof.coverage,
                 'backend': backend.kind, 'authorized_target': label,
                 'resolved_addresses': list(scope.addresses), **spec.extra_coverage}
+    if backend.kind == 'docker':
+        coverage['network_isolation'] = 'Not enforced: resource limits are not an IP egress boundary.'
     if spec.kind == 'net' and scope.addresses:
         coverage['connection_address'] = target.value
         coverage['scope_note'] = 'One approved resolved address is tested; other DNS addresses are not assessed.'
@@ -134,6 +136,12 @@ def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=
                 argv.insert(1, '--quiet')
             outfile = ''
         r = backend.run(argv, prof.timeout, cancel, tmp, invoke=run)
+        if backend.kind == 'docker':
+            coverage['container_cleanup'] = ('Container absent at verification' if r.cleanup_verified is True
+                                             else 'Unverified; check the local Docker runtime')
+            if r.cleanup_verified is not True:
+                return result('cancelled' if r.cancelled else 'partial',
+                              error='Docker container cleanup could not be verified. Results are incomplete; inspect the local Docker runtime.')
         if r.cancelled:
             return result('cancelled', error='Scan cancelled; results are incomplete.')
         if r.timed_out:
