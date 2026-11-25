@@ -23,8 +23,8 @@ class AssessmentPlan:
 
 
 def website_plan(value, profile, rows):
-    if profile not in ('Quick', 'Standard'):
-        raise ValueError('Choose Quick or Standard.')
+    if profile not in ('Quick', 'Standard', 'Extended'):
+        raise ValueError('Choose Quick, Standard or Extended.')
     target = Target.parse(value)
     try:
         ip = ip_address(target.host)
@@ -49,7 +49,7 @@ def website_plan(value, profile, rows):
         return PlanStep(title, 'Not available / verified', coverage,
                         'Check engines or prepare tools. Local addresses require a native candidate.')
 
-    if profile == 'Standard':
+    if profile in ('Standard', 'Extended'):
         if target.scheme == 'https':
             steps.append(recommend(sslscan.SPEC, 'TLS protocol and cipher review',
                                    'Optional manual sslscan review; not part of automated Standard.'))
@@ -68,9 +68,13 @@ def website_plan(value, profile, rows):
                               'TLS 1.2 and 1.3; same connected address and port, certificate verification retained.'
                               if target.scheme == 'https' else 'Not applicable to HTTP.',
                               'Failed negotiation is inconclusive; no legacy protocol or cipher enumeration.'))
+    if profile == 'Extended':
+        steps.append(PlanStep('Cross-origin policy verification', 'Built-in Python',
+                              'Up to two anonymous GET requests to the same URL and connected address.',
+                              'Checks origin reflection; no credentials or sensitive data access is tested.'))
     return AssessmentPlan(target.url, profile, tuple(steps), (
         'Recommendations are advisory, not authorization or execution readiness.',
-        'Quick and native Standard are available; external candidate checks are manual only.',
+        'Quick, Standard and Extended are available; external candidate checks are manual only.',
         'No DNS lookup, redirect following, discovery or target contact during planning.',
         'Site-wide crawling, injection, authenticated testing and exploit validation are not covered.',
         'External tools require separate review and authorization in Security tools.',
