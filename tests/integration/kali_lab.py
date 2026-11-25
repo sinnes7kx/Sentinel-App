@@ -4,6 +4,7 @@ Usage: python tests/integration/kali_lab.py after building sentinel-kali-lab-too
 Only the lab runner injects the fixture's network namespace into actual Backend.run.
 """
 import os
+import json
 from pathlib import Path
 import re
 import shutil
@@ -18,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 from sentinel.tools import sslscan, whatweb, runner
 from sentinel.tools.base import execute
 from sentinel.tools.backends import Backend
+from lab_boundary import verify_boundary
 
 DOCKER = ['docker', '--host', 'unix:///var/run/docker.sock']
 TOOL_IMAGE = 'sentinel-kali-lab-tools'
@@ -42,6 +44,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp)
         shutil.copy(Path(__file__).with_name('kali_fixture.py'), path / 'server.py')
+        shutil.copy(Path(__file__).with_name('lab_boundary.py'), path / 'boundary.py')
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(path / 'key.pem'), '-out', str(path / 'cert.pem'),
                         '-days', '2', '-subj', '/CN=localhost',
@@ -65,6 +68,20 @@ def main():
                 time.sleep(.2)
             if docker('inspect', '--format', '{{.HostConfig.NetworkMode}}', name) != 'none':
                 raise RuntimeError('Fixture network is not disabled.')
+
+            # Check actual interfaces/routes from both the fixture and an
+            # independent container joined to its namespace.
+            snapshot = json.loads(docker('exec', name, 'python3', '/fixture/boundary.py'))
+            namespace = verify_boundary(snapshot)
+            probe = json.loads(docker('run', '--rm', '--pull=never',
+                                      '--network=container:' + name,
+                                      '--cap-drop=ALL', '--security-opt=no-new-privileges',
+                                      '--read-only', '--memory=128m', '--cpus=1', '--pids-limit=32',
+                                      '--user', f'{os.getuid()}:{os.getgid()}',
+                                      '--mount', f'type=bind,source={path},target=/fixture,readonly',
+                                      '--entrypoint', 'python3', fixture_id, '/fixture/boundary.py'))
+            verify_boundary(probe, namespace)
+            print('PASS: fixture and independent probe share a loopback-only network namespace.')
 
             def isolated(argv, timeout, cancel):
                 if argv[:3] != DOCKER:
@@ -99,7 +116,8 @@ def main():
                 raise AssertionError('sslscan did not return expected fixture evidence: ' + tls.status + ' ' + tls.error + ' ' + str(sorted(ids)))
             if 'TLS_NO_MODERN' in ids or 'TLS_1.0' in ids or 'TLS_1.1' in ids:
                 raise AssertionError('False TLS protocol finding.')
-            print('PASS: WhatWeb technology evidence, redirect restriction and sslscan TLS fixture.')
+            verify_boundary(json.loads(docker('exec', name, 'python3', '/fixture/boundary.py')), namespace)
+            print('PASS: WhatWeb technology evidence, redirect restriction and sslscan TLS fixture; boundary unchanged.')
             print(docker('run', '--rm', '--pull=never', '--network=none', '--cap-drop=ALL',
                          '--entrypoint', 'dpkg-query', image_id, '-W', 'whatweb', 'sslscan'))
         finally:
