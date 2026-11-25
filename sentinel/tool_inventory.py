@@ -82,6 +82,20 @@ def snapshot(cancel, invoke=runner.run, which=shutil.which, lookup=None,
         add('Managed Kali toolkit', 'Configured', 'Saved WSL settings; this inventory does not start WSL or verify tools.', 'toolkit')
     else:
         add('Managed Kali toolkit', 'Not configured', 'Prepare WhatWeb and sslscan without a separate Kali VM.', 'toolkit')
+    # Native availability is not the same thing as managed-tool availability.
+    toolkit = next(row for row in rows if row['name'] == 'Managed Kali toolkit')
+    for row in rows:
+        if row['name'] in ('WhatWeb (native)', 'sslscan (native)') and row['state'] == 'Not detected':
+            if toolkit['state'] == 'Detected':
+                row['state'] = 'Docker alternative'
+                row['detail'] = ('Native executable not present. The saved Docker toolkit image is available. '
+                                 'Select Test toolkit to verify startup; scan connectivity is not verified.')
+            elif toolkit['state'] == 'Configured':
+                row['detail'] = ('Native executable not present. A WSL toolkit is configured but unverified. '
+                                 'Select the appropriate engine before scanning.')
+            elif toolkit['state'] == 'Unverified':
+                row['detail'] = ('Native executable not present. A saved Docker toolkit cannot be confirmed. '
+                                 'Check Docker Desktop and retry toolkit preparation.')
     zap = probe(prefix + ['image', 'inspect', '--format', '{{.Id}} {{join .RepoDigests " "}}', ZAP_IMAGE]) if responding else None
     parts = (zap or '').split()
     present = bool(parts and IMAGE_ID.fullmatch(parts[0]) and
