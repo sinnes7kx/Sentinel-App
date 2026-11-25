@@ -2,7 +2,7 @@
 from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
 from .finding_views import finding_views, finding_detail
 import tkinter as tk
-from .desktop_theme import CANVAS, detail_box
+from .desktop_theme import CANVAS, SEVERITY_COLORS, detail_box, scrollable
 from tkinter import ttk, messagebox
 from threading import Event
 from .orchestration import for_app
@@ -25,7 +25,7 @@ class ToolsWindow(tk.Toplevel):
         watch_poll(self)
         self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
-        self.title('Sentinel | Security tools'); self.geometry('940x720'); self.minsize(780, 600); self.configure(bg=CANVAS)
+        self.title('Sentinel | Security tools'); self.geometry('1000x750'); self.minsize(820, 650); self.configure(bg=CANVAS)
         self.tool = TOOLS[0]; self.target = tk.StringVar(value=DEFAULTS['web']); self.profile = tk.StringVar()
         self.auth = tk.BooleanVar(); self.confirm = tk.StringVar(); self.status = tk.StringVar(value='Ready.')
         self.tool_name = tk.StringVar(value=self.tool.name); self.info = tk.StringVar(); self.label = tk.StringVar()
@@ -47,20 +47,36 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_busy = False
         self.wsl_cancel = Event()
         self.bind('<Destroy>', self.cancel_wsl_probe, add='+')
-        body = ttk.Frame(self, padding=16); body.pack(fill='both', expand=True, padx=16, pady=16)
-        ttk.Label(body, text='Choose a check', font=('Segoe UI', 14, 'bold')).pack(anchor='w')
-        box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly'); box.pack(fill='x', pady=(4, 2))
+        shell = ttk.Frame(self, padding=16, style='Canvas.TFrame')
+        shell.pack(fill='both', expand=True)
+        ttk.Label(shell, text='Security tools', style='WorkspaceTitle.TLabel').pack(anchor='w')
+        ttk.Label(shell, text='Choose a check, prepare its engine, then review evidence and fixes.',
+                  style='Canvas.TLabel').pack(anchor='w', pady=(2, 10))
+        self.tabs = ttk.Notebook(shell)
+        self.tabs.pack(fill='both', expand=True)
+        body = self.setup_page = ttk.Frame(self.tabs, padding=12)
+        results = self.results_page = ttk.Frame(self.tabs, padding=12)
+        self.tabs.add(body, text='1. Configure assessment')
+        self.tabs.add(results, text='2. Findings & evidence')
+        ttk.Label(body, text='Choose a security check', style='Title.TLabel').pack(anchor='w')
+        box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly')
+        box.pack(fill='x', pady=(4, 2))
         box.bind('<<ComboboxSelected>>', self.tool_changed)
-        ttk.Label(body, textvariable=self.info, wraplength=860, justify='left').pack(anchor='w', pady=(2, 8))
-        ttk.Label(body, textvariable=self.label).pack(anchor='w')
-        row = ttk.Frame(body); row.pack(fill='x'); row.columnconfigure(0, weight=1)
-        ttk.Entry(row, textvariable=self.target).grid(row=0, column=0, sticky='ew')
-        self.run_btn = ttk.Button(row, text='Start', command=self.start); self.run_btn.grid(row=0, column=1, padx=(10, 0))
-        self.stop_btn = ttk.Button(row, text='Stop', command=self.stop, state='disabled'); self.stop_btn.grid(row=0, column=2, padx=(8, 0))
-        self.profiles = ttk.Frame(body); self.profiles.pack(fill='x', pady=8)
-        back = ttk.Frame(body); back.pack(fill='x', pady=4)
+        ttk.Label(body, textvariable=self.info, wraplength=745, justify='left').pack(anchor='w', pady=(2, 8))
+        ttk.Label(body, textvariable=self.label, wraplength=745).pack(anchor='w')
+        ttk.Entry(body, textvariable=self.target).pack(fill='x', pady=(3, 6))
+        self.profiles = ttk.Frame(body)
+        self.profiles.pack(fill='x', pady=(2, 8))
+        ttk.Separator(body).pack(fill='x', pady=(0, 8))
+        ttk.Label(body, text='Execution engine', style='Title.TLabel').pack(anchor='w')
+        self.engine_hint = tk.StringVar()
+        ttk.Label(body, textvariable=self.engine_hint, wraplength=745,
+                  style='Muted.TLabel').pack(anchor='w', pady=(2, 5))
+        back = ttk.Frame(body)
+        back.pack(fill='x', pady=4)
         ttk.Label(back, text='Run using').pack(side='left')
-        ttk.Combobox(back, textvariable=self.backend, values=['native', 'wsl', 'docker'], state='readonly', width=10).pack(side='left', padx=8)
+        ttk.Combobox(back, textvariable=self.backend, values=['native', 'wsl', 'docker'],
+                     state='readonly', width=10).pack(side='left', padx=8)
         self.environment_label = ttk.Label(back)
         self.environment_box = ttk.Combobox(back, textvariable=self.environment)
         self.wsl_controls = ttk.Frame(body)
@@ -69,20 +85,49 @@ class ToolsWindow(tk.Toplevel):
         self.detect_wsl_button.pack(side='left')
         self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
-        ttk.Label(self.wsl_controls, textvariable=self.wsl_status, style='Muted.TLabel',
-                  wraplength=480).pack(side='left', fill='x')
-        ttk.Checkbutton(body, text='I have permission for this exact target and check (remembered until scope changes).', variable=self.auth).pack(anchor='w', pady=(4, 2))
-        conf = self.confirm_row = ttk.Frame(body); conf.pack(fill='x', pady=(0, 8))
-        ttk.Label(conf, text='Only for targets outside your private network — type the host name or IP again to confirm:').pack(side='left')
-        ttk.Entry(conf, textvariable=self.confirm, width=26).pack(side='left', padx=8)
-        self.bar = ttk.Progressbar(body, mode='indeterminate'); self.bar.pack(fill='x', pady=(0, 8))
-        self.tree = ttk.Treeview(body, columns=('sev', 'title'), show='headings', height=8)
-        self.tree.heading('sev', text='Risk'); self.tree.heading('title', text='What was found')
-        self.tree.column('sev', width=80, stretch=False); self.tree.column('title', width=640)
-        self.tree.pack(fill='both', expand=True); self.tree.bind('<<TreeviewSelect>>', self.selected)
-        self.detail = detail_box(body, height=9)
-        self.detail.pack(fill='both', expand=True, pady=(8, 0))
-        ttk.Label(self, textvariable=self.status, style='Canvas.TLabel').pack(fill='x', padx=16, pady=(0, 10))
+        self.preparation_status = ttk.Label(body, textvariable=self.wsl_status, style='Muted.TLabel',
+                                            wraplength=745)
+        self.preparation_status.pack(anchor='w')
+        conf = self.confirm_row = ttk.Frame(body)
+        conf.pack(fill='x', pady=(6, 0))
+        ttk.Checkbutton(conf, text='I have permission for this exact target and check (remembered until scope changes).',
+                        variable=self.auth).pack(anchor='w', pady=(0, 4))
+        ttk.Label(conf, text='Public targets: type the hostname or IP again to confirm.',
+                  wraplength=745).pack(anchor='w')
+        ttk.Entry(conf, textvariable=self.confirm, width=32).pack(anchor='w', pady=3)
+
+        action = ttk.Frame(shell, style='Canvas.TFrame')
+        action.pack(fill='x', pady=(8, 0))
+        self.run_btn = ttk.Button(action, text='Start assessment', command=self.start, style='Primary.TButton')
+        self.run_btn.pack(side='right')
+        self.stop_btn = ttk.Button(action, text='Stop', command=self.stop, state='disabled')
+        self.stop_btn.pack(side='right', padx=6)
+        ttk.Label(action, textvariable=self.status, style='Canvas.TLabel', wraplength=500).pack(side='left', fill='x', expand=True)
+        self.bar = ttk.Progressbar(shell, mode='indeterminate', style='Scan.Horizontal.TProgressbar')
+        self.bar.pack(fill='x', pady=(6, 0))
+        panes = ttk.Panedwindow(results, orient='horizontal')
+        panes.pack(fill='both', expand=True)
+        listing = ttk.Frame(panes, padding=6)
+        evidence = ttk.Frame(panes, padding=6)
+        panes.add(listing, weight=4)
+        panes.add(evidence, weight=5)
+        ttk.Label(listing, text='Findings', style='Title.TLabel').pack(anchor='w', pady=(0, 6))
+        table = ttk.Frame(listing)
+        table.pack(fill='both', expand=True)
+        self.tree = ttk.Treeview(table, columns=('sev', 'title'), show='headings', height=8)
+        self.tree.heading('sev', text='Risk')
+        self.tree.heading('title', text='What was found')
+        self.tree.column('sev', width=80, stretch=False)
+        self.tree.column('title', width=240, minwidth=100)
+        for level, color in SEVERITY_COLORS.items():
+            self.tree.tag_configure(level, foreground=color)
+        scrollable(table, self.tree)
+        self.tree.bind('<<TreeviewSelect>>', self.selected)
+        ttk.Label(evidence, text='Evidence & remediation', style='Title.TLabel').pack(anchor='w', pady=(0, 6))
+        detail = ttk.Frame(evidence)
+        detail.pack(fill='both', expand=True)
+        self.detail = detail_box(detail, height=9)
+        scrollable(detail, self.detail)
         watch_authorized_scope(self, (self.app.project, self.tool_name, self.target, self.profile,
                                       self.backend, self.environment), self.auth)
         watch_variables(self, (self.backend,), self.backend_changed)
@@ -92,6 +137,11 @@ class ToolsWindow(tk.Toplevel):
 
     def update_backend_controls(self):
         kind = self.backend.get()
+        self.engine_hint.set({
+            'native': 'Windows/local executable. No Kali setup needed if the tool is installed.',
+            'wsl': 'Kali or another installed WSL distribution. Guest cancellation is limited.',
+            'docker': 'Linux container using a local immutable image. Docker must already be running.',
+        }[kind])
         self.environment_label.configure(text={'native': '', 'wsl': 'Distribution', 'docker': 'Image ID or digest'}[kind])
         self.environment_box.configure(values=self.wsl_names if kind == 'wsl' else (),
                                        state='disabled' if self.wsl_busy else 'normal')
@@ -185,7 +235,7 @@ class ToolsWindow(tk.Toplevel):
             self.wsl_status.set(error)
         elif action == 'prepare':
             self.environment.set(result['values'])
-            self.wsl_status.set('Ready · WhatWeb and sslscan')
+            self.wsl_status.set('Prepared · WhatWeb and sslscan detected; scan connectivity not verified.')
         elif action == 'list':
             self.wsl_names = result['values']
             if self.wsl_names and self.environment.get().strip() not in self.wsl_names:
@@ -257,6 +307,7 @@ class ToolsWindow(tk.Toplevel):
             messagebox.showerror('Cannot start', str(e), parent=self); return
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
         self.update_backend_controls()
+        self.tabs.select(self.results_page)
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
@@ -287,7 +338,7 @@ class ToolsWindow(tk.Toplevel):
                 for v in views:
                     f = v.finding
                     title = f['title'] + (f' ({v.occurrences} identical observations)' if v.occurrences > 1 else '')
-                    self.tree.insert('', 'end', iid=str(v.index), values=(f['severity'].upper(), title))
+                    self.tree.insert('', 'end', iid=str(v.index), values=(f['severity'].upper(), title), tags=(f['severity'].lower(),))
                 n = len(views); self.status.set(f"{res['status'].capitalize()} • {n} finding{'s' if n != 1 else ''} • Saved to project history.")
                 cov = ', '.join(f'{k}: {v}' for k, v in res['coverage'].items() if k in ('built-in checks', 'whatweb', 'sslscan', 'nikto'))
                 self.say((res['error'] or ('Click a row for details.' if n else 'Nothing was found with these settings. That does not prove the system is secure.')) + ('\n\nCoverage — ' + cov if cov else ''))
