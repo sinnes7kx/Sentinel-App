@@ -7,6 +7,7 @@ import ssl
 import re
 from .evidence import sanitize
 from .cookie_review import cookie_observations, RULESET as COOKIE_RULESET
+from .header_review import header_observations, RULESET as HEADER_RULESET
 from .pinned_http import resolve_once, PinnedConnector
 
 @dataclass(frozen=True)
@@ -117,7 +118,7 @@ def inspect_headers(target, status, headers, tls=None, cert=None):
                 add('CERT_EXPIRY','medium' if days < 7 else 'low','Certificate expires soon',f'Approximately {max(0,int(days))} whole days remain.','Renew the certificate and verify automated renewal.')
         except (ValueError, OverflowError):
             pass
-    return out + cookie_observations(headers)
+    return out + cookie_observations(headers) + header_observations(target, status, headers)
 
 
 def scan(value, authorized=False, timeout=8, cancel=None, dns_domain=''):
@@ -163,7 +164,7 @@ def scan(value, authorized=False, timeout=8, cancel=None, dns_domain=''):
         findings = inspect_headers(target, status, headers, tls, cert) + observations(headers, status, tls, cipher)
         conn.close()
         coverage={'http':'completed','tls':'verified connection' if tls else 'not applicable','dns':'not requested',
-                  'cookie_ruleset': COOKIE_RULESET}
+                  'cookie_ruleset': COOKIE_RULESET, 'header_ruleset': HEADER_RULESET}
         coverage.update({'connection_address': connector.selected,
                          'resolved_addresses': [e.address for e in endpoints],
                          'scope_note': 'One connected address from a single DNS snapshot; other addresses not assessed.'})
@@ -196,7 +197,8 @@ def compare(previous, current):
         return {'comparable':False, 'new':[], 'still_present':[], 'not_observed':[]}
     if previous['status'] != 'completed' or current['status'] != 'completed' or previous['http_status'] != current['http_status']:
         return {'comparable':False, 'new':[], 'still_present':[], 'not_observed':[]}
-    if previous.get('coverage', {}).get('cookie_ruleset') != current.get('coverage', {}).get('cookie_ruleset'):
+    if any(previous.get('coverage', {}).get(rule) != current.get('coverage', {}).get(rule)
+           for rule in ('cookie_ruleset', 'header_ruleset')):
         return {'comparable':False, 'new':[], 'still_present':[], 'not_observed':[]}
     old_address = previous.get('coverage', {}).get('connection_address')
     new_address = current.get('coverage', {}).get('connection_address')

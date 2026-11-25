@@ -48,6 +48,8 @@ def _reason(previous, current):
         return 'Only matching native Quick or Standard profiles are supported.'
     if previous.get('coverage', {}).get('cookie_ruleset') != current.get('coverage', {}).get('cookie_ruleset'):
         return 'Cookie check coverage changed. Run a fresh baseline before comparing results.'
+    if previous.get('coverage', {}).get('header_ruleset') != current.get('coverage', {}).get('header_ruleset'):
+        return 'Browser header check coverage changed. Run a fresh baseline before comparing results.'
     if previous.get('dns_domain') or current.get('dns_domain'):
         return 'Optional DNS assessments require a separate evidence review.'
     if any(r.get('status') != 'completed' for r in (previous, current)):

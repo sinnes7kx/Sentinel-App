@@ -16,6 +16,9 @@ class Fixture(BaseHTTPRequestHandler):
         self.send_header('Set-Cookie','private=super-secret-fixture')
         if self.path=='/cookies':
             self.send_header('Set-Cookie','__Host-fixture-private=fixture-secret; Domain=example.test; Path=/; SameSite=unknown')
+        if self.path=='/headers':
+            self.send_header('Content-Security-Policy',"default-src 'self'; default-src https://private-fixture.example")
+            self.send_header('X-Frame-Options','invalid')
         self.end_headers()
         self.wfile.write(b'<html>private-body-fixture</html>')
     def log_message(self,*args):pass
@@ -47,6 +50,12 @@ class TestEngine(unittest.TestCase):
         self.assertTrue({'COOKIE_HOST_PREFIX','COOKIE_INVALID_SAMESITE'} <= {f['id'] for f in r['findings']})
         self.assertEqual(r['coverage']['cookie_ruleset'],'cookie-review-v1')
         self.assertNotIn('fixture-private',str(r));self.assertNotIn('fixture-secret',str(r))
+    def test_header_review_single_request(self):
+        n=len(Fixture.hits);r=scan(self.base+'/headers',True).to_dict()
+        self.assertEqual(len(Fixture.hits),n+1)
+        self.assertTrue({'CSP_DUP_DIRECTIVE','FRAME_HEADER_SYNTAX'} <= {f['id'] for f in r['findings']})
+        self.assertEqual(r['coverage']['header_ruleset'],'header-review-v1')
+        self.assertNotIn('private-fixture.example',str(r))
     def test_tls_header(self):
         t=Target.parse('https://example.test');self.assertIn('HSTS',[f.id for f in inspect_headers(t,200,[])])
         self.assertNotIn('HSTS',[f.id for f in inspect_headers(t,200,[('Strict-Transport-Security','max-age=31536000; includeSubDomains')])])
