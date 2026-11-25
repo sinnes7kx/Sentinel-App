@@ -1,0 +1,3 @@
+# Private source-launch runtime; versions also used by the Windows installer.
+packaging==26.4
+dnspython==2.8.0
