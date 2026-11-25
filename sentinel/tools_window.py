@@ -1,5 +1,6 @@
 """Beginner window for every integrated security tool."""
-from .ui_lifecycle import watch_poll, watch_variables
+from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
+from .finding_views import finding_views, finding_detail
 import tkinter as tk
 from .desktop_theme import CANVAS, detail_box
 from tkinter import ttk, messagebox
@@ -70,7 +71,7 @@ class ToolsWindow(tk.Toplevel):
         self.check_wsl_button.pack(side='left', padx=6)
         ttk.Label(self.wsl_controls, textvariable=self.wsl_status, style='Muted.TLabel',
                   wraplength=480).pack(side='left', fill='x')
-        ttk.Checkbutton(body, text='I own this target or have written permission to test it.', variable=self.auth).pack(anchor='w', pady=(4, 2))
+        ttk.Checkbutton(body, text='I have permission for this exact target and check (remembered until scope changes).', variable=self.auth).pack(anchor='w', pady=(4, 2))
         conf = self.confirm_row = ttk.Frame(body); conf.pack(fill='x', pady=(0, 8))
         ttk.Label(conf, text='Only for targets outside your private network — type the host name or IP again to confirm:').pack(side='left')
         ttk.Entry(conf, textvariable=self.confirm, width=26).pack(side='left', padx=8)
@@ -82,8 +83,8 @@ class ToolsWindow(tk.Toplevel):
         self.detail = detail_box(body, height=9)
         self.detail.pack(fill='both', expand=True, pady=(8, 0))
         ttk.Label(self, textvariable=self.status, style='Canvas.TLabel').pack(fill='x', padx=16, pady=(0, 10))
-        watch_variables(self, (self.target, self.profile, self.backend, self.environment),
-                        lambda *_: self.auth.set(False))
+        watch_authorized_scope(self, (self.app.project, self.tool_name, self.target, self.profile,
+                                      self.backend, self.environment), self.auth)
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
         self.update_backend_controls()
@@ -259,7 +260,6 @@ class ToolsWindow(tk.Toplevel):
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
-        self.auth.set(False)
         try:
             self.job = self.orchestrator.submit(
                 lambda: tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict(),
@@ -282,8 +282,13 @@ class ToolsWindow(tk.Toplevel):
             if err: self.status.set('Error: ' + err); self.say('The check could not run. ' + err)
             else:
                 self.result = res; sid = self.app.store.save(pid, res)
-                for i, f in enumerate(res['findings']): self.tree.insert('', 'end', iid=str(i), values=(f['severity'].upper(), f['title']))
-                n = len(res['findings']); self.status.set(f"{res['status'].capitalize()} • {n} finding{'s' if n != 1 else ''} • Saved to project history.")
+                views = finding_views(res)
+                self.presented_findings = {str(v.index): v for v in views}
+                for v in views:
+                    f = v.finding
+                    title = f['title'] + (f' ({v.occurrences} identical observations)' if v.occurrences > 1 else '')
+                    self.tree.insert('', 'end', iid=str(v.index), values=(f['severity'].upper(), title))
+                n = len(views); self.status.set(f"{res['status'].capitalize()} • {n} finding{'s' if n != 1 else ''} • Saved to project history.")
                 cov = ', '.join(f'{k}: {v}' for k, v in res['coverage'].items() if k in ('built-in checks', 'whatweb', 'sslscan', 'nikto'))
                 self.say((res['error'] or ('Click a row for details.' if n else 'Nothing was found with these settings. That does not prove the system is secure.')) + ('\n\nCoverage — ' + cov if cov else ''))
                 self.app.project.set(name); self.app.load_history(sid)
@@ -293,8 +298,8 @@ class ToolsWindow(tk.Toplevel):
 
     def selected(self, _=None):
         s = self.tree.selection()
-        if s and self.result:
-            f = self.result['findings'][int(s[0])]; self.say(f"{f['title']}\nConfidence: {f.get('confidence', 'unknown')} | Source: {f.get('source', 'legacy')}\n\nWHAT WE SAW\n{f['evidence']}\n\nWHAT TO DO\n{f['remediation']}")
+        if s and self.result and s[0] in getattr(self, 'presented_findings', {}):
+            self.say(finding_detail(self.presented_findings[s[0]]))
 
     def close(self):
         if self.busy and not messagebox.askyesno('Exit', 'A check is running. Stop it and close?', parent=self): return

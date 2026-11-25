@@ -1,4 +1,4 @@
-from .ui_lifecycle import watch_poll, watch_variables
+from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
 from .desktop_theme import SEVERITY_COLORS, configure_theme, detail_box, scrollable
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -12,6 +12,7 @@ from .store import Store
 from .dnscheck import domain_name
 import json
 from .report import html_report
+from .finding_views import finding_views, finding_detail, findings_summary
 
 
 class DesktopUnavailable(RuntimeError):
@@ -88,7 +89,7 @@ class App(tk.Tk):
         self.run_btn.grid(row=1, column=3, sticky='ew', padx=(0, 6), pady=(3, 0))
         self.stop_btn = ttk.Button(form, text='Stop', command=self.stop, state='disabled')
         self.stop_btn.grid(row=1, column=4, sticky='ew', pady=(3, 0))
-        self.auth_check = ttk.Checkbutton(form, text='I have explicit permission to assess this URL and any DNS domain entered.',
+        self.auth_check = ttk.Checkbutton(form, text='I have permission for this URL, DNS domain and profile (remembered until scope changes).',
                                           variable=self.auth)
         self.auth_check.grid(row=2, column=0, columnspan=5, sticky='w', pady=(8, 0))
         ttk.Label(form, text='Assessment depth', style='Muted.TLabel').grid(row=3, column=0, sticky='w', pady=(6, 0))
@@ -96,7 +97,7 @@ class App(tk.Tk):
                      width=12, state='readonly').grid(row=3, column=1, sticky='w', pady=(6, 0))
         ttk.Label(form, text='Standard adds same-endpoint TLS 1.2/1.3 verification.', style='Muted.TLabel').grid(
             row=3, column=2, columnspan=3, sticky='w', pady=(6, 0))
-        watch_variables(self, (self.url, self.dns, self.assessment_profile), lambda *_: self.auth.set(False))
+        watch_authorized_scope(self, (self.project, self.url, self.dns, self.assessment_profile), self.auth)
 
     def build_overview(self, parent):
         overview = ttk.Frame(parent, style='Canvas.TFrame')
@@ -214,7 +215,7 @@ class App(tk.Tk):
         except (ValueError,PermissionError) as e:messagebox.showerror('Cannot start',str(e));return
         self.progress.configure(mode='indeterminate')
         self.progress.start(18)
-        self.busy=True; self.cancel_event=Event(); self.stop_btn.configure(state='normal'); self.run_btn.configure(state='disabled'); self.status.set('Assessing authorized URL…'); self.auth.set(False)
+        self.busy=True; self.cancel_event=Event(); self.stop_btn.configure(state='normal'); self.run_btn.configure(state='disabled'); self.status.set('Assessing authorized URL…')
         cancel, queue = self.cancel_event, self.queue
         try:
             self.job = self.orchestrator.submit(
@@ -273,19 +274,25 @@ class App(tk.Tk):
         connection = [coverage['tool']] if coverage.get('tool') else [
             f"HTTP {r['http_status']}" if r.get('http_status') else '', r.get('tls')]
         self.summary.set(' · '.join(filter(None, [r['status'].capitalize(), *connection])))
-        self.observation_count.set(str(len(r['findings'])))
-        for index, finding in enumerate(r['findings']):
+        views = finding_views(r)
+        self.presented_findings = {str(v.index): v for v in views}
+        self.observation_count.set(str(len(views)))
+        for v in views:
+            finding = v.finding
             severity = finding['severity']
-            self.findings.insert('', 'end', iid=str(index), values=(finding['title'], severity.upper()),
+            title = finding['title'] + (f' ({v.occurrences} identical observations)' if v.occurrences > 1 else '')
+            self.findings.insert('', 'end', iid=str(v.index), values=(title, severity.upper()),
                                  tags=(severity.lower(),))
-        self.set_detail(r['target']+'\n\nCoverage: '+json.dumps(r.get('coverage',{'profile':'legacy v0.1'}),ensure_ascii=False)+'\n\n'+(r['error'] or 'Select a finding for evidence and remediation. These are configuration observations, not verified exploits.'))
+        totals = findings_summary(r)
+        self.set_detail(r['target']+f"\n\n{totals['distinct']} distinct findings; {totals['observations']} observations; {totals['exact_repeats']} identical repeats.\n\nCoverage: "+json.dumps(r.get('coverage',{'profile':'legacy v0.1'}),ensure_ascii=False)+'\n\n'+(r['error'] or 'Select a finding for evidence and remediation. These are configuration observations, not verified exploits.'))
     def finding_selected(self,event=None):
         s=self.findings.selection()
-        if s and self.current:
-            f=self.current['findings'][int(s[0])]
+        if s and self.current and s[0] in getattr(self, 'presented_findings', {}):
+            view = self.presented_findings[s[0]]
+            f = view.finding
             self.selection_title.set(f['title'])
-            self.selection_meta.set(' · '.join(filter(None, [f['severity'].title(), f.get('source')])))
-            self.set_detail(f"{f['title']}\n\nOBSERVED EVIDENCE\n{f['evidence']}\n\nREMEDIATION\n{f['remediation']}")
+            self.selection_meta.set(' · '.join(filter(None, [f['severity'].title(), f.get('source'), 'Confidence: ' + f.get('confidence', 'unknown')])))
+            self.set_detail(finding_detail(view))
     def export(self):
         if not self.current:messagebox.showinfo('Export','Select an assessment first.');return
         p=filedialog.asksaveasfilename(defaultextension='.html',filetypes=[('HTML report','*.html')],initialfile='sentinel-report.html')
