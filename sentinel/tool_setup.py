@@ -4,6 +4,7 @@ WinGet uses its normal package verification and interactive installer UI.
 No remote scripts, arbitrary package names, or automatic license acceptance.
 """
 import os
+import json
 from pathlib import Path
 import re
 import shutil
@@ -20,6 +21,29 @@ def docker_executable():
     # The assessment runner uses PATH as well; if installation updates PATH,
     # a restart may be needed before either setup or assessment can use it.
     return shutil.which('docker')
+
+
+def source_preference_path(recipe=DOCKERFILE):
+    root = os.environ.get('LOCALAPPDATA')
+    if not root or not recipe.is_file():
+        return None
+    digest = bundle.file_digest(recipe)
+    return Path(root) / 'Sentinel' / ('source-toolkit-' + digest[:20] + '.json')
+
+
+def saved_source_backend(path=None):
+    path = source_preference_path() if path is None else path
+    if path is not None:
+        try:
+            if path.stat().st_size > 4096:
+                return None
+            saved = json.loads(path.read_text(encoding='utf-8'))
+            backend = Backend(saved['kind'], saved['environment'])
+            if backend.kind == 'docker' and re.fullmatch(r'sha256:[0-9a-f]{64}', backend.environment):
+                return backend
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+    return None
 
 
 def install_package(kind, which=shutil.which, launch=subprocess.run):
@@ -45,13 +69,14 @@ def install_package(kind, which=shutil.which, launch=subprocess.run):
 
 def setup(kind, cancel, platform=None, install=install_package, invoke=runner.run,
           find_nmap=nmap.SPEC.installed, find_docker=docker_executable,
-          prepare=bundle.prepare, remember=bundle.remember, payload=None, dockerfile=None):
+          prepare=bundle.prepare, remember=bundle.remember, payload=None, dockerfile=None,
+          preference=source_preference_path):
     platform = os.name if platform is None else platform
     payload = bundle.PAYLOAD if payload is None else payload
     dockerfile = DOCKERFILE if dockerfile is None else dockerfile
     if platform != 'nt':
         raise ValueError('Automatic installation currently supports Windows only.')
-    if kind not in ('nmap', 'docker', 'toolkit'):
+    if kind not in ('nmap', 'docker', 'toolkit', 'all'):
         raise ValueError('Unknown setup option.')
 
     def result(status, message, **extra):
@@ -59,6 +84,27 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
 
     if cancel.is_set():
         return result('cancelled', 'Setup cancelled before starting.')
+    if kind == 'all':
+        options = dict(platform=platform, install=install, invoke=invoke,
+                       find_nmap=find_nmap, find_docker=find_docker, prepare=prepare,
+                       remember=remember, payload=payload, dockerfile=dockerfile, preference=preference)
+        stages = []
+        final = {}
+        for component in ('nmap', 'toolkit'):
+            if cancel.is_set():
+                break
+            try:
+                stage = setup(component, cancel, **options)
+            except (ValueError, OSError) as exc:
+                stage = result('failed', str(exc) if isinstance(exc, ValueError) else 'Could not access setup files or executable.')
+            stages.append(component + ': ' + stage['message'])
+            final = stage
+            if stage['status'] != 'completed':
+                break
+        if cancel.is_set():
+            return result('cancelled', '\n'.join(stages + ['Setup stopped; installed components are retained.']))
+        return result(final.get('status', 'partial'), '\n'.join(stages),
+                      **{key: final[key] for key in ('backend', 'environment') if key in final})
     if kind == 'nmap':
         if not find_nmap():
             install('nmap')
@@ -92,6 +138,16 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
     else:
         if not dockerfile.is_file():
             return result('partial', 'Toolkit recipe unavailable. Use the official Sentinel installer or complete source checkout.')
+        saved_path = preference(dockerfile)
+        saved = saved_source_backend(saved_path) if saved_path is not None else None
+        if saved:
+            inspected = invoke(prefix + ['image', 'inspect', '--format', '{{.Id}}', saved.environment], 15, cancel)
+            if (inspected.returncode == 0 and not inspected.cancelled and not inspected.timed_out
+                    and not inspected.truncated and inspected.stdout.strip() == saved.environment):
+                return result('completed', 'Saved Kali toolkit image detected; scan connectivity is not verified.',
+                              backend=saved.kind, environment=saved.environment)
+        if cancel.is_set():
+            return result('cancelled', 'Setup cancelled before building Kali tools.')
         tag = 'sentinel-local/source-toolkit'
         built = invoke(prefix + ['build', '--platform', 'linux/amd64', '--tag', tag,
                                  str(dockerfile.parent)], 1200, cancel)
@@ -102,6 +158,8 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
         if inspected.returncode != 0 or inspected.cancelled or inspected.timed_out or inspected.truncated or not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
             return result('partial', 'The built image could not be verified.')
         backend = Backend('docker', image)
+        if saved_path is not None and not cancel.is_set():
+            remember(backend, saved_path)
     if cancel.is_set():
         return result('cancelled', 'Setup cancelled; prepared components are retained.')
     return result('completed', 'Kali toolkit prepared: WhatWeb and sslscan. Scan connectivity is not verified.',
