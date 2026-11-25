@@ -28,7 +28,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class ApplicationTests(unittest.TestCase):
-    def test_shared_scheduler_actual_http_history_and_scope_reset(self):
+    def test_shared_scheduler_actual_http_history_and_start_confirmation(self):
         # Dispose destroyed Tk objects here before a later server thread triggers GC.
         self.addCleanup(gc.collect)
         try:
@@ -86,17 +86,16 @@ class ApplicationTests(unittest.TestCase):
                     app.update()
                     self.assertFalse(tools.advanced.get())
                     self.assertEqual(tools.profile_help.get(), tools.tool.profiles[tools.profile.get()].blurb)
-                    tools.auth.set(True)
+
                     tools.choose_engine()
                     self.assertEqual(tools.backend.get(), 'native')
-                    self.assertTrue(tools.auth.get(), 'Same engine does not revoke permission')
-                    tools.auth.set(True); tools.target.set('127.0.0.1')
-                    self.assertFalse(tools.auth.get())
-                    tools.auth.set(True)
+
+                    tools.target.set('127.0.0.1')
+
                     tools.target.set(tools.target.get())
-                    self.assertTrue(tools.auth.get())
+
                     tools.backend.set('wsl')
-                    self.assertFalse(tools.auth.get())
+
                     with patch('sentinel.tools_window.wsl.distributions', return_value=['kali-linux', 'Debian']):
                         tools.detect_wsl()
                         deadline = time.monotonic() + 5
@@ -118,39 +117,38 @@ class ApplicationTests(unittest.TestCase):
                     tools.bundled = True
                     tools.tool_name.set(next(t.name for t in TOOLS if t.id == 'whatweb'))
                     tools.tool_changed()
-                    tools.auth.set(True)
+
                     with patch('sentinel.tools_window.bundle.saved_backend', return_value=Backend('docker', 'sha256:' + 'a' * 64)):
                         tools.use_saved_toolkit()
                     self.assertEqual(tools.backend.get(), 'docker')
                     self.assertEqual(tools.environment.get(), 'sha256:' + 'a' * 64)
-                    self.assertFalse(tools.auth.get())
+
                     self.assertIn('not verified', tools.wsl_status.get())
                     self.assertFalse(tools.busy)
-                    tools.auth.set(True)
+
                     tools.tool_changed()
-                    self.assertTrue(tools.auth.get(), 'Re-selecting same check retains permission')
+
                     tools.close()
                     self.assertIs(app.open_network(), tools)
-                    self.assertTrue(tools.auth.get(), 'Reopening unchanged session retains permission')
+
                     with patch('sentinel.tools_window.bundle.saved_backend', return_value=Backend('docker', 'sha256:' + 'a' * 64)), \
                          patch('sentinel.tools_window.shutil.which', return_value='docker'), \
                          patch('sentinel.tools.base.find_binary', return_value=None):
                         tools.target.set('https://192.168.1.10/')
                         tools.backend.set('native')
-                        tools.auth.set(True)
+
                         tools.choose_engine()
                         self.assertEqual(tools.backend.get(), 'docker')
-                        self.assertFalse(tools.auth.get())
-                        tools.auth.set(True)
+
                         tools.choose_engine()
-                        self.assertTrue(tools.auth.get())
+
                         self.assertFalse(tools.busy)
                     tools.target.set('http://127.0.0.2/')
-                    self.assertFalse(tools.auth.get())
+
                     tools.backend.set('wsl')
                     tools.environment.set('kali-linux')
-                    tools.auth.set(True)
-                    with patch('sentinel.tools_window.messagebox.askokcancel', return_value=True), \
+
+                    with patch('sentinel.tools_window.confirm_tool', return_value=''), \
                          patch('sentinel.tools_window.wsl.available_tools', return_value=['timeout']):
                         tools.start()
                         deadline = time.monotonic() + 5
@@ -160,13 +158,15 @@ class ApplicationTests(unittest.TestCase):
                     self.assertIn('Missing in selected WSL distribution', tools.status.get())
                     self.assertEqual(tools.tabs.select(), str(tools.setup_page))
                     self.assertEqual(app.store.history(app.store.project(app.project.get())), [])
-                    self.assertTrue(tools.auth.get())
+
                     self.assertTrue(tools.bind('<Escape>'))
                     timer = tools.poll_timer
                     tools.destroy()
                     self.assertNotIn(timer, app.tk.call('after', 'info'))
                     app.url.set(f'http://127.0.0.1:{server.server_port}/')
-                    app.auth.set(True); app.run()
+                    with patch('sentinel.app.confirm_website', return_value=True) as confirmation:
+                        app.run()
+                        confirmation.assert_called_once_with(app, app.url.get(), 'Quick', '')
                     deadline = time.monotonic() + 6
                     while app.busy and time.monotonic() < deadline:
                         app.update(); time.sleep(.01)
@@ -196,32 +196,19 @@ class ApplicationTests(unittest.TestCase):
                     self.assertEqual(app.workspace_tabs.select(), str(app.history_page))
                     app.nav_buttons['Findings'].invoke()
                     self.assertEqual(app.workspace_tabs.select(), str(app.findings_page))
-                    self.assertTrue(app.auth.get(), 'Unchanged scope retains explicit permission')
-                    app.run()  # No second checkbox interaction.
+                    with patch('sentinel.app.confirm_website', return_value=True) as confirmation:
+                        app.run()
+                        confirmation.assert_called_once()
                     deadline = time.monotonic() + 6
                     while app.busy and time.monotonic() < deadline:
                         app.update(); time.sleep(.01)
                     self.assertFalse(app.busy)
                     self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
-                    self.assertTrue(app.auth.get())
-                    app.assessment_profile.set('Standard')
-                    self.assertFalse(app.auth.get())
-                    app.assessment_profile.set('Quick')
-                    self.assertFalse(app.auth.get(), 'Returning to old scope must not restore permission')
-                    app.auth.set(True)
-                    app.dns.set('fixture.invalid')
-                    self.assertFalse(app.auth.get())
-                    app.dns.set('')
-                    app.auth.set(True)
-                    app.project.set('Another project')
-                    self.assertFalse(app.auth.get())
-                    app.project.set('My website')
-                    app.auth.set(True)
-                    app.auth.set(False)  # Explicit revocation.
-                    with patch('sentinel.app.messagebox.showerror') as error:
+                    with patch('sentinel.app.confirm_website', return_value=False) as confirmation:
                         app.run()
-                        error.assert_called_once()
+                        confirmation.assert_called_once()
                     self.assertFalse(app.busy)
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
                     utilities = app.open_local_utilities()
                     utilities.withdraw()
                     self.assertIs(utilities.orchestrator, app.orchestrator)
