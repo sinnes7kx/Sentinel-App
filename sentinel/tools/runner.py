@@ -19,6 +19,7 @@ class RunResult:
     cancelled: bool = False
     timed_out: bool = False
     truncated: bool = False
+    cleanup_verified: bool | None = None
 
 
 def clean(text, limit=120):

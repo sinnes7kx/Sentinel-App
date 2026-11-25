@@ -67,12 +67,14 @@ def main():
                 raise RuntimeError('Fixture network is not disabled.')
 
             def isolated(argv, timeout, cancel):
-                if argv[:2] == ['docker', 'run']:
+                if argv[:3] != DOCKER:
+                    raise AssertionError('Unexpected Docker endpoint.')
+                if argv[3] == 'run':
                     if '--pull=never' not in argv or image_id not in argv:
                         raise AssertionError('Unexpected tool image or pull policy.')
-                    argv = DOCKER + ['run', '--network=container:' + name] + argv[2:]
-                elif argv[:3] == ['docker', 'rm', '--force']:
-                    argv = DOCKER + argv[1:]
+                    argv = DOCKER + ['run', '--network=container:' + name] + argv[4:]
+                elif argv[3:5] == ['rm', '--force'] or argv[3:6] == ['container', 'ls', '-a']:
+                    pass
                 else:
                     raise AssertionError('Unexpected subprocess.')
                 return runner.run(argv, min(timeout, 120), cancel)
