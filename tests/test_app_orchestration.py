@@ -91,6 +91,15 @@ class ApplicationTests(unittest.TestCase):
                     app.findings.selection_set(app.findings.get_children()[0])
                     app.finding_selected()
                     self.assertEqual(app.selection_title.get(), records[0][1]['findings'][0]['title'])
+                    first_scan = app.current_id
+                    index = int(app.findings.selection()[0])
+                    app.remediation_state.set('Investigating')
+                    app.save_remediation()
+                    self.assertEqual(app.store.remediation(app.history_project_id, first_scan)[index]['state'], 'Investigating')
+                    app.load_history(first_scan)
+                    app.findings.selection_set(str(index))
+                    app.finding_selected()
+                    self.assertEqual(app.remediation_state.get(), 'Investigating')
                     self.assertTrue(app.auth.get(), 'Unchanged scope retains explicit permission')
                     app.run()  # No second checkbox interaction.
                     deadline = time.monotonic() + 6
