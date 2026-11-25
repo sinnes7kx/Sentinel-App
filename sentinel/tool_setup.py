@@ -17,18 +17,9 @@ DOCKERFILE = Path(__file__).resolve().parents[1] / 'packaging' / 'windows' / 'Do
 
 
 def docker_executable():
-    found = shutil.which('docker')
-    if found:
-        return found
-    for key in ('ProgramFiles', 'ProgramW6432', 'LOCALAPPDATA'):
-        root = os.environ.get(key)
-        if root:
-            for relative in ('Docker/Docker/resources/bin/docker.exe',
-                             'Programs/Docker/Docker/resources/bin/docker.exe'):
-                path = Path(root) / relative
-                if path.is_file():
-                    return str(path)
-    return None
+    # The assessment runner uses PATH as well; if installation updates PATH,
+    # a restart may be needed before either setup or assessment can use it.
+    return shutil.which('docker')
 
 
 def install_package(kind, which=shutil.which, launch=subprocess.run):
@@ -95,7 +86,7 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
     if cancel.is_set():
         return result('cancelled', 'Setup cancelled before preparing Kali tools.')
     if (payload / 'rootfs.sha256').is_file():
-        # Existing signed/hash-checked packaged workflow. No separate Kali VM.
+        # Existing hash-checked packaged workflow. No separate Kali VM.
         backend = prepare('docker')
         remember(backend, bundle.preference_path())
     else:
