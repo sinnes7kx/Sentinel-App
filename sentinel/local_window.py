@@ -23,8 +23,8 @@ class LocalUtilitiesWindow(tk.Toplevel):
         watch_poll(self)
         bind_escape(self)
         self.title('Sentinel | Local utilities')
-        self.geometry('760x510')
-        self.minsize(580, 420)
+        self.geometry('720x480')
+        self.minsize(600, 430)
         self.configure(background=CANVAS)
         self.orchestrator = for_app(app)
         self.queue = Queue()
@@ -38,7 +38,7 @@ class LocalUtilitiesWindow(tk.Toplevel):
         self.report_path = tk.StringVar()
         self.report_format = tk.StringVar(value=next(iter(REPORT_FORMATS)))
 
-        body = ttk.Frame(self, padding=12, style='Canvas.TFrame')
+        body = ttk.Frame(self, padding=8, style='Canvas.TFrame')
         body.pack(fill='both', expand=True)
         notebook = ttk.Notebook(body)
         notebook.pack(fill='both', expand=True)
@@ -58,10 +58,10 @@ class LocalUtilitiesWindow(tk.Toplevel):
         self.poll_timer = self.after(80, self.poll)
 
     def build_integrity(self, notebook):
-        pane = ttk.Frame(notebook, padding=12)
+        pane = ttk.Frame(notebook, padding=8)
         notebook.add(pane, text='File integrity')
         ttk.Label(pane, text='Compute SHA-256 and SHA-512 to identify a file or verify a trusted checksum.',
-                  style='Muted.TLabel', wraplength=515).pack(anchor='w', pady=(0, 9))
+                  style='Muted.TLabel', wraplength=515).pack(anchor='w', pady=(0, 5))
         self.file_field(pane, 'File to check', self.integrity_path)
         ttk.Label(pane, text='Reference digest (optional)').pack(anchor='w', pady=(7, 0))
         expected = ttk.Entry(pane, textvariable=self.expected_digest)
@@ -71,7 +71,7 @@ class LocalUtilitiesWindow(tk.Toplevel):
         return self.output_box(pane)
 
     def build_review(self, notebook):
-        pane = ttk.Frame(notebook, padding=12)
+        pane = ttk.Frame(notebook, padding=8)
         notebook.add(pane, text='Tool report review')
         ttk.Label(pane, text='Summarize a local export up to 5 MB.', style='Muted.TLabel').pack(anchor='w', pady=(0, 9))
         ttk.Label(pane, text='Report format').pack(anchor='w')
@@ -101,7 +101,7 @@ class LocalUtilitiesWindow(tk.Toplevel):
 
     def action(self, pane, label, command):
         button = ttk.Button(pane, text=label, command=command, style='Primary.TButton')
-        button.pack(anchor='w', pady=9)
+        button.pack(anchor='w', pady=5)
         self.controls.append(button)
 
     def output_box(self, pane):
