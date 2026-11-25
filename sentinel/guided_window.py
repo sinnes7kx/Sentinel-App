@@ -198,13 +198,13 @@ class GuidedWindow(tk.Toplevel):
             self.app.url.set(approved_plan.target)
             self.app.dns.set('')
             self.app.assessment_profile.set(approved_plan.profile)
-            # Scope traces revoke permission if any assessment setting changed.
+            # The main window confirms the captured scope on each start.
             self.destroy()
             self.app.lift()
 
-        proceed = ttk.Button(panel, text='Continue to authorization', command=continue_assessment)
+        proceed = ttk.Button(panel, text='Continue to assessment', command=continue_assessment)
         proceed.pack(anchor='w')
-        ttk.Label(panel, text='No assessment starts here. Review permission in the main window.',
+        ttk.Label(panel, text='No assessment starts here. Confirm the scope when you start the assessment.',
                   wraplength=500).pack(anchor='w', pady=4)
         from .ui_lifecycle import watch_variables
         watch_variables(window, (target, profile), preview)
