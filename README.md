@@ -161,3 +161,7 @@ Open **Security tools…** in the header. One window runs every integrated check
 | Web server misconfiguration | Nikto (non-attacking test groups only) | `sudo apt install nikto` |
 
 Architecture: `sentinel/tools/base.py` runs every tool the same way (scope check, authorization, no shell, time and output limits, untrusted-output parsing). A new tool is one file defining a `ToolSpec` (profiles, argument builder, parser) plus one line in `tools/__init__.py`. Private/loopback targets need the permission checkbox; any other target must also be typed back and is limited to one host. Nikto severities are keyword estimates and are labeled as such. Parsers were written against documented output formats and fixtures; validate them against real tool output on Kali before relying on them. Tests: `py -3 -m unittest discover -s tests -v`.
+
+### Website mapper
+
+Open **Website mapper**, enter an authorized HTTP(S) starting page and click **Map website**. See public links and ordinary form input names in a clickable tree. The map is limited to 16 pages and two link levels on the exact same origin and one resolved peer; no query links, redirects, hidden-page guessing, login, form submission or scripts. Only use it where ordinary navigation is read-only. Results stay in the window and are not a vulnerability verdict. Run `Test_Sentinel.bat` after updating.
