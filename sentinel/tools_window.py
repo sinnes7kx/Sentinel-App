@@ -7,8 +7,8 @@ from threading import Event
 from .orchestration import for_app
 from queue import Queue, Empty
 from .tools import TOOLS
-from .tools.base import ToolMissing, parse_scope
-from .tools.scope import require_authorization
+from .tools.base import ToolMissing, parse_input
+from .tools.runner import clean
 from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
 from .tools import bundle, wsl
 import os
@@ -46,6 +46,8 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_busy = False
         self.wsl_cancel = Event()
         self.bind('<Destroy>', self.cancel_wsl_probe, add='+')
+        ttk.Label(self, textvariable=self.status, style='Canvas.TLabel', wraplength=740).pack(
+            side='bottom', fill='x', padx=16, pady=(0, 8))
         body = ttk.Frame(self, padding=16); body.pack(fill='both', expand=True, padx=16, pady=16)
         ttk.Label(body, text='Choose a check', font=('Segoe UI', 14, 'bold')).pack(anchor='w')
         box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly'); box.pack(fill='x', pady=(4, 2))
@@ -63,16 +65,18 @@ class ToolsWindow(tk.Toplevel):
         self.environment_label = ttk.Label(back)
         self.environment_box = ttk.Combobox(back, textvariable=self.environment)
         self.wsl_controls = ttk.Frame(body)
-        self.prepare_button = ttk.Button(self.wsl_controls, text='Prepare included tools', command=self.prepare_bundle)
-        self.detect_wsl_button = ttk.Button(self.wsl_controls, text='Detect distributions', command=self.detect_wsl)
+        setup_actions = ttk.Frame(self.wsl_controls)
+        setup_actions.pack(fill='x')
+        self.prepare_button = ttk.Button(setup_actions, text='Prepare included tools', command=self.prepare_bundle)
+        self.detect_wsl_button = ttk.Button(setup_actions, text='Detect distributions', command=self.detect_wsl)
         self.detect_wsl_button.pack(side='left')
-        self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
+        self.check_wsl_button = ttk.Button(setup_actions, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
         ttk.Label(self.wsl_controls, textvariable=self.wsl_status, style='Muted.TLabel',
-                  wraplength=480).pack(side='left', fill='x')
+                  wraplength=700).pack(anchor='w', fill='x')
         ttk.Checkbutton(body, text='I own this target or have written permission to test it.', variable=self.auth).pack(anchor='w', pady=(4, 2))
         conf = self.confirm_row = ttk.Frame(body); conf.pack(fill='x', pady=(0, 8))
-        ttk.Label(conf, text='Only for targets outside your private network — type the host name or IP again to confirm:').pack(side='left')
+        ttk.Label(conf, text='Public target only — confirm the exact host name or IP:').pack(side='left')
         ttk.Entry(conf, textvariable=self.confirm, width=26).pack(side='left', padx=8)
         self.bar = ttk.Progressbar(body, mode='indeterminate'); self.bar.pack(fill='x', pady=(0, 8))
         self.tree = ttk.Treeview(body, columns=('sev', 'title'), show='headings', height=8)
@@ -81,7 +85,6 @@ class ToolsWindow(tk.Toplevel):
         self.tree.pack(fill='both', expand=True); self.tree.bind('<<TreeviewSelect>>', self.selected)
         self.detail = detail_box(body, height=9)
         self.detail.pack(fill='both', expand=True, pady=(8, 0))
-        ttk.Label(self, textvariable=self.status, style='Canvas.TLabel').pack(fill='x', padx=16, pady=(0, 10))
         watch_variables(self, (self.target, self.profile, self.backend, self.environment),
                         lambda *_: self.auth.set(False))
         watch_variables(self, (self.backend,), self.backend_changed)
@@ -227,7 +230,11 @@ class ToolsWindow(tk.Toplevel):
         elif t.id not in SUPPORTED:
             availability = '\nSelect Nmap, sslscan, or WhatWeb to use this backend.'
         else:
-            availability = '\nUses the executable installed in the selected environment.'
+            availability = '\nChoose Check installed tools to verify availability.' if kind == 'wsl' else ''
+        if t.id == 'nmap':
+            availability += '\nNmap requires a separate installation in the selected environment. The offline toolkit includes WhatWeb and sslscan.'
+        if kind == 'wsl':
+            availability += '\nStopping WSL ends the Windows launcher. Linux work can continue until the profile timeout.'
         self.info.set(t.blurb + availability + (('\n' + t.note) if t.note else ''))
 
     def refresh_tool(self):
@@ -245,10 +252,9 @@ class ToolsWindow(tk.Toplevel):
         try:
             if not self.auth.get(): raise PermissionError('Confirm that you own this target or have written permission to test it.')
             backend = Backend(self.backend.get(), self.environment.get().strip())
+            parse_input(self.tool, self.target.get())
             backend.validate(self.tool.id)
             if backend.kind == 'native' and not self.tool.installed(): raise ToolMissing(self.tool.install_hint)
-            if backend.kind == 'wsl':
-                if not messagebox.askokcancel('WSL execution', 'WSL execution is experimental. Stop ends the Windows launcher, but Linux work may continue until its profile time limit. Use native or Docker for stronger cancellation. Continue?', parent=self): return
             name = self.app.project.get(); pid = self.app.store.project(name)
         except ToolMissing as e:
             messagebox.showinfo('Tool needed', str(e), parent=self); return
@@ -256,13 +262,32 @@ class ToolsWindow(tk.Toplevel):
             messagebox.showerror('Cannot start', str(e), parent=self); return
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
         self.update_backend_controls()
+        self.result = None
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
         self.auth.set(False)
+        def run_check():
+            try:
+                if backend.kind == 'wsl':
+                    found = wsl.available_tools(backend.environment, ev)
+                    if ev.is_set():
+                        return None
+                    missing = [name for name in (tool.id, 'timeout') if name not in found]
+                    if missing:
+                        available = ', '.join(sorted(SUPPORTED.intersection(found))) or 'none detected'
+                        raise ToolMissing(f"{backend.environment} is missing {', '.join(missing)}. "
+                                          f"Detected assessment tools: {available}.")
+                options = {'backend': backend} if tool.id != 'web-checkup' else {}
+                return tool.scan(value, prof, True, conf, ev, **options).to_dict()
+            except (ValueError, PermissionError, ToolMissing) as exc:
+                if isinstance(exc, PermissionError) and exc.errno is not None:
+                    raise
+                return {'status': 'failed', 'start_error': clean(str(exc), 500)}
+
         try:
             self.job = self.orchestrator.submit(
-                lambda: tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict(),
+                run_check,
                 lambda result, error: queue.put((pid, name, result, error)), ev)
             self.status.set('Queued; one check runs at a time.')
         except RuntimeError as exc:
@@ -279,6 +304,8 @@ class ToolsWindow(tk.Toplevel):
             pid, name, res, err = self.queue.get_nowait()
             self.busy = False; self.bar.stop(); self.run_btn.configure(state='normal'); self.stop_btn.configure(state='disabled')
             self.update_backend_controls()
+            if res and res.get('start_error'):
+                err = res['start_error']
             if err: self.status.set('Error: ' + err); self.say('The check could not run. ' + err)
             else:
                 self.result = res; sid = self.app.store.save(pid, res)

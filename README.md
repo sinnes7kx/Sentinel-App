@@ -58,6 +58,8 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution mod
 2. In Sentinel, open **Security tools**, set **Run using** to **wsl**, and click **Detect distributions**. Sentinel prefers `kali-linux` when no listed distribution is already selected. You can also enter the exact name of a custom distribution.
 3. Use **Check installed tools** to see whether Nmap, sslscan, WhatWeb, and their GNU `timeout` dependency are available. Choose a supported tool and use its normal profile and authorization controls.
 
+For a full website URL, the main window's **Run assessment** checks headers and TLS with built-in Python code. In **Security tools**, sslscan accepts an HTTPS URL. The Nmap adapter expects a host name, IP address, or permitted private CIDR. Detecting a distribution confirms its registration. **Check installed tools** lists its binaries. The offline installer includes WhatWeb and sslscan, and its **Prepare included tools** action selects the imported environment.
+
 The binaries run inside Kali under the distribution's configured user. Package installation is handled within Kali. Use an authorized address reachable from the distribution. A loopback address in Kali may refer to a different machine context from Windows loopback.
 
 CI requires the GUI tests on Windows and Linux. Earlier version-specific test counts below are historical. The bundled tools completed local fixture checks in Linux Docker. Native Windows WSL and Docker Desktop setup and older 16 GB hardware performance remain unverified.

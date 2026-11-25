@@ -25,12 +25,15 @@ def _default_resolver(host):
     return [ai[4][0].split('%')[0] for ai in socket.getaddrinfo(host, None)]
 
 
-def parse_net_target(text, resolver=_default_resolver):
+def parse_net_input(text):
+    """Validate syntax offline. Hostname scope is classified after DNS resolution."""
     v = (text or '').strip()
     if '%' in v:
         raise ValueError('IPv6 zone identifiers are not supported; enter an unambiguous address.')
     if not v or v.startswith('-') or any(ord(c) < 33 or ord(c) == 127 for c in v):
         raise ValueError('Enter one IP address, one network such as 192.168.1.0/24, or one host name.')
+    if '://' in v:
+        raise ValueError('A port scan needs a host name or IP address. For a full website URL, use the website assessment in the main window.')
     if '/' in v:
         try:
             net = ipaddress.ip_network(v, strict=True)
@@ -48,13 +51,23 @@ def parse_net_target(text, resolver=_default_resolver):
         pass
     if v.replace('.', '').isdigit() or not _HOST.match(v):
         raise ValueError('That is not a valid IP address or host name.')
+    return NetTarget(v.lower(), 'host', False, 1)
+
+
+def resolve_net_target(target, resolver=_default_resolver):
+    if target.kind != 'host':
+        return target
     try:
-        addrs = [ipaddress.ip_address(a) for a in resolver(v)]
+        addrs = [ipaddress.ip_address(a) for a in resolver(target.value)]
     except (OSError, ValueError):
         raise ValueError('The host name could not be resolved.') from None
     if not addrs:
         raise ValueError('The host name could not be resolved.')
-    return NetTarget(v.lower(), 'host', all(_is_local(a) for a in addrs), 1, tuple(dict.fromkeys(str(a) for a in addrs)))
+    return NetTarget(target.value, 'host', all(_is_local(a) for a in addrs), 1, tuple(dict.fromkeys(str(a) for a in addrs)))
+
+
+def parse_net_target(text, resolver=_default_resolver):
+    return resolve_net_target(parse_net_input(text), resolver)
 
 
 def require_authorization(target, attested, typed_confirmation=''):
