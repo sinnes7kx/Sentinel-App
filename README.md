@@ -14,7 +14,7 @@ Open **Security tools**, choose **wsl** or **docker**, then **Prepare included t
 
 ## Start Sentinel from source
 
-On Windows, double-click `Start_Sentinel.bat` to open the desktop app. The command-line equivalent is `py -3 run.py`. The app needs Python 3.10 or later with Tcl/Tk. If Tcl/Tk cannot start, the default launcher opens the local browser dashboard. Use `--desktop` to require the desktop, or `--web` to choose the browser directly.
+On Windows, double-click `Start_Sentinel.bat` to open the desktop app. The launcher automatically creates a private Python virtual environment under `%LOCALAPPDATA%\\Sentinel\\python` and installs the pinned runtime requirements inside it. The first launch or a requirements change needs internet access; subsequent launches reuse the environment. No global pip installation or activation is needed. The equivalent managed command is `py -3 launch_private.py`. Direct `py -3 run.py` still uses the selected Python environment without automatic setup. The packaged Windows installer already includes its own Python and libraries. The app needs Python 3.10 or later with Tcl/Tk. If Tcl/Tk cannot start, the default launcher opens the local browser dashboard. Use `--desktop` to require the desktop, or `--web` to choose the browser directly.
 
 The desktop workspace puts project history, findings, and evidence side by side. It also provides assessment comparison, HTML and JSON exports, dependency advisory checks, and existing external-tool configuration.
 
