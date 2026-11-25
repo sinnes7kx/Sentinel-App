@@ -2,7 +2,8 @@ import unittest
 from threading import Event
 from unittest.mock import Mock
 
-from sentinel.tool_selfcheck import check_installation
+from sentinel.tool_selfcheck import check_installation, check_zap_installation
+from sentinel.zap_setup import ZAP_REPOSITORY
 from sentinel.tools.backends import Backend
 from sentinel.tools.runner import RunResult
 
@@ -70,3 +71,45 @@ class InstallationTests(unittest.TestCase):
         result = self.run_check(invoke, cancel)
         self.assertEqual(result['status'], 'cancelled')
         self.assertEqual(calls[-2:], [('rm', None), ('container', None)])
+
+
+class ZapInstallationTests(unittest.TestCase):
+    def check(self, invoke, which=lambda _: 'docker', cancel=None):
+        return check_zap_installation(cancel or Event(), invoke=invoke, which=which, platform='nt')
+
+    def test_missing_image_never_downloads(self):
+        calls = []
+        def invoke(argv, *_):
+            calls.append(argv)
+            return RunResult(0, 'linux', '') if argv[3] == 'version' else RunResult(1, '', 'missing')
+        result = self.check(invoke)
+        self.assertEqual(result['status'], 'partial')
+        self.assertIn('no download', result['message'])
+        self.assertEqual([a[3] for a in calls], ['version', 'image'])
+
+    def test_existing_image_verified_without_download(self):
+        calls = []
+        def invoke(argv, *_):
+            calls.append(argv)
+            if argv[3] == 'version':
+                return RunResult(0, 'linux', '')
+            if argv[3] == 'image':
+                return RunResult(0, IMAGE + ' ' + ZAP_REPOSITORY + '@sha256:' + 'b' * 64, '')
+            if argv[3] == 'run':
+                self.assertIn('--network=none', argv)
+                self.assertIn('--pull=never', argv)
+                self.assertEqual(argv[-3:], [IMAGE, 'zap.sh', '-version'])
+                return RunResult(0, '2.17.1', '')
+            return RunResult(0, '', '')
+        result = self.check(invoke)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['rows'][0]['state'], 'Version verified')
+        self.assertEqual([a[3] for a in calls], ['version', 'image', 'run', 'rm', 'container'])
+
+    def test_missing_docker_and_cancel_never_launch(self):
+        invoke = Mock()
+        self.assertEqual(self.check(invoke, which=lambda _: None)['status'], 'partial')
+        cancel = Event()
+        cancel.set()
+        self.assertEqual(self.check(invoke, cancel=cancel)['status'], 'cancelled')
+        invoke.assert_not_called()

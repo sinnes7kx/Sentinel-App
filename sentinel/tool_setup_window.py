@@ -9,7 +9,7 @@ from .tool_setup import setup
 from .tool_inventory import snapshot
 from .desktop_theme import scrollable
 from .setup_recovery import recovery
-from .tool_selfcheck import check_installation
+from .tool_selfcheck import check_installation, check_zap_installation
 
 
 class ToolSetupWindow(tk.Toplevel):
@@ -53,8 +53,10 @@ class ToolSetupWindow(tk.Toplevel):
         controls.pack(fill='x')
         self.refresh_button = ttk.Button(controls, text='Refresh status', command=self.refresh)
         self.refresh_button.pack(side='left')
-        self.test_button = ttk.Button(controls, text='Test installation', command=self.test_installation)
+        self.test_button = ttk.Button(controls, text='Test toolkit', command=self.test_installation)
         self.test_button.pack(side='left', padx=6)
+        self.zap_test_button = ttk.Button(controls, text='Test ZAP', command=self.test_zap)
+        self.zap_test_button.pack(side='left')
         self.selected_button = ttk.Button(controls, text='Prepare selected', command=self.prepare_selected, state='disabled')
         self.selected_button.pack(side='left', padx=6)
         self.cancel_button = ttk.Button(controls, text='Cancel check', command=self.cancel_refresh, state='disabled')
@@ -119,29 +121,35 @@ class ToolSetupWindow(tk.Toplevel):
         self.status.set('Checking local metadata and Docker daemon. No downloads or scans.')
 
     def test_installation(self):
+        self.start_selfcheck('selfcheck', check_installation, 'Testing the saved Docker toolkit offline. No target is contacted.')
+
+    def test_zap(self):
+        self.start_selfcheck('zapcheck', check_zap_installation, 'Testing installed ZAP offline. No downloads or targets.')
+
+    def start_selfcheck(self, mode, operation, message):
         if self.busy:
             return
         self.cancel = Event()
         cancel, queue = self.cancel, self.queue
         try:
-            self.orchestrator.submit(lambda: check_installation(cancel),
+            self.orchestrator.submit(lambda: operation(cancel),
                                      lambda result, error: queue.put((result, error)), cancel)
         except RuntimeError as exc:
             self.status.set(str(exc))
             return
-        self.mode = 'selfcheck'
+        self.mode = mode
         self.set_busy(True)
-        self.status.set('Testing the saved Docker toolkit offline. No target is contacted.')
+        self.status.set(message)
 
     def cancel_refresh(self):
-        if self.busy and self.mode in ('inventory', 'selfcheck'):
+        if self.busy and self.mode in ('inventory', 'selfcheck', 'zapcheck'):
             self.cancel.set()
 
     def set_busy(self, busy):
         self.busy = busy
-        for widget in [self.button, self.refresh_button, self.test_button, *self.options]:
+        for widget in [self.button, self.refresh_button, self.test_button, self.zap_test_button, *self.options]:
             widget.state(['disabled'] if busy else ['!disabled'])
-        self.cancel_button.configure(state='normal' if busy and self.mode in ('inventory', 'selfcheck') else 'disabled')
+        self.cancel_button.configure(state='normal' if busy and self.mode in ('inventory', 'selfcheck', 'zapcheck') else 'disabled')
         self.retry_button.state(['!disabled'] if not busy and self.last_retry_allowed else ['disabled'])
         self.selected()
 
@@ -199,8 +207,9 @@ class ToolSetupWindow(tk.Toplevel):
                     self.status.set('Local status refreshed. No assessment was performed.')
                 else:
                     self.status.set(error or 'Status check cancelled or incomplete. Previous inventory may be stale.')
-            elif mode == 'selfcheck':
-                self.rows = [row for row in self.rows if row['name'] not in ('whatweb', 'sslscan')]
+            elif mode in ('selfcheck', 'zapcheck'):
+                names = ('whatweb', 'sslscan') if mode == 'selfcheck' else ('ZAP (offline test)',)
+                self.rows = [row for row in self.rows if row['name'] not in names]
                 if result and not error:
                     self.rows.extend(result.get('rows', []))
                 self.tree.delete(*self.tree.get_children())
@@ -225,6 +234,10 @@ class ToolSetupWindow(tk.Toplevel):
         self.poll_timer = self.after(100, self.poll)
 
     def close(self):
+        if self.busy and self.mode in ('selfcheck', 'zapcheck'):
+            self.cancel.set()
+            self.status.set('Cancelling test and checking container cleanup. Close when finished.')
+            return
         if self.busy and self.mode == 'inventory':
             self.cancel.set()
             self.destroy()

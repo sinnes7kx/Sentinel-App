@@ -16,7 +16,7 @@ def _ok(result):
             not result.timed_out and not result.truncated)
 
 
-def prepare_zap(prefix, cancel, invoke=run, refresh=False):
+def prepare_zap(prefix, cancel, invoke=run, refresh=False, allow_download=True):
     def outcome(status, message, **extra):
         return {'status': status, 'message': message, **extra}
 
@@ -37,7 +37,7 @@ def prepare_zap(prefix, cancel, invoke=run, refresh=False):
         return outcome('cancelled', 'ZAP preparation cancelled.')
     previous = inspect()
     image = previous
-    if (refresh or not image) and not cancel.is_set():
+    if allow_download and (refresh or not image) and not cancel.is_set():
         pulled = invoke(prefix + ['pull', ZAP_IMAGE], 1200, cancel)
         if not _ok(pulled):
             return outcome('cancelled' if cancel.is_set() else 'partial',
@@ -46,7 +46,8 @@ def prepare_zap(prefix, cancel, invoke=run, refresh=False):
     if cancel.is_set():
         return outcome('cancelled', 'ZAP preparation cancelled.')
     if not image:
-        return outcome('partial', 'The local ZAP image identity could not be established.')
+        return outcome('partial', 'The local ZAP image identity could not be established.' if allow_download else
+                       'No verified local ZAP image. Prepare ZAP first; no download was attempted.')
     name = 'sentinel-zap-version-' + uuid.uuid4().hex
     try:
         result = invoke(prefix + ['run', '--name', name, '--rm', '--pull=never',
@@ -63,12 +64,12 @@ def prepare_zap(prefix, cancel, invoke=run, refresh=False):
     version = VERSION.search(result.stdout) if _ok(result) else None
     if not version:
         return outcome('partial', 'ZAP image detected but its offline version check did not complete.')
-    if refresh:
+    if refresh and allow_download:
         change = 'Image changed.' if previous and previous != image else (
             'Image unchanged.' if previous == image else 'Image downloaded.')
         message = 'ZAP ' + version.group(1) + ' checked against upstream stable. ' + change
     else:
-        message = 'ZAP ' + version.group(1) + ' prepared.'
+        message = 'ZAP ' + version.group(1) + (' prepared.' if allow_download else ' detected locally.')
     return outcome('completed', message +
                    ' Offline version check passed; desktop scanning is not enabled.',
                    zap_image=image, zap_version=version.group(1))
