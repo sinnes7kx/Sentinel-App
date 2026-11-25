@@ -76,6 +76,7 @@ class App(tk.Tk):
             ('Security tools', self.open_network, 'Nav.TButton'),
             ('Dependencies', self.open_dependencies, 'Nav.TButton'),
             ('CVE review', self.open_cve_review, 'Nav.TButton'),
+            ('Access control lab', self.open_access_lab, 'Nav.TButton'),
             ('Local utilities', self.open_local_utilities, 'Nav.TButton'),
         ):
             button = ttk.Button(self.navigation, text=label, command=command, style=style)
@@ -288,6 +289,16 @@ class App(tk.Tk):
         window = self.children.get('guided_assessment')
         if window is None:
             window = GuidedWindow(self)
+        else:
+            window.deiconify()
+            window.lift()
+        return window
+
+    def open_access_lab(self):
+        from .access_lab_window import AccessLabWindow
+        window = self.children.get('access_lab')
+        if window is None:
+            window = AccessLabWindow(self)
         else:
             window.deiconify()
             window.lift()
