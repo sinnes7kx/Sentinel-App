@@ -7,6 +7,7 @@ from .orchestration import for_app
 from queue import Queue, Empty
 from pathlib import Path
 from .engine import Target, scan, compare
+from .standard_assessment import standard_scan
 from .store import Store
 from .dnscheck import domain_name
 import json
@@ -41,6 +42,7 @@ class App(tk.Tk):
         self.project = tk.StringVar(value='My website')
         self.url = tk.StringVar(value='https://')
         self.dns = tk.StringVar()
+        self.assessment_profile = tk.StringVar(value='Quick')
         self.auth = tk.BooleanVar()
         self.status = tk.StringVar(value='Ready')
         self.summary = tk.StringVar(value='No assessment selected')
@@ -89,7 +91,12 @@ class App(tk.Tk):
         self.auth_check = ttk.Checkbutton(form, text='I have explicit permission to assess this URL and any DNS domain entered.',
                                           variable=self.auth)
         self.auth_check.grid(row=2, column=0, columnspan=5, sticky='w', pady=(8, 0))
-        watch_variables(self, (self.url, self.dns), lambda *_: self.auth.set(False))
+        ttk.Label(form, text='Assessment depth', style='Muted.TLabel').grid(row=3, column=0, sticky='w', pady=(6, 0))
+        ttk.Combobox(form, textvariable=self.assessment_profile, values=('Quick', 'Standard'),
+                     width=12, state='readonly').grid(row=3, column=1, sticky='w', pady=(6, 0))
+        ttk.Label(form, text='Standard adds same-endpoint TLS 1.2/1.3 verification.', style='Muted.TLabel').grid(
+            row=3, column=2, columnspan=3, sticky='w', pady=(6, 0))
+        watch_variables(self, (self.url, self.dns, self.assessment_profile), lambda *_: self.auth.set(False))
 
     def build_overview(self, parent):
         overview = ttk.Frame(parent, style='Canvas.TFrame')
@@ -200,6 +207,9 @@ class App(tk.Tk):
         if self.busy:return
         try:
             if not self.auth.get():raise PermissionError('Confirm explicit permission before testing.')
+            profile = self.assessment_profile.get()
+            if profile not in ('Quick', 'Standard'): raise ValueError('Unknown assessment profile.')
+            operation = standard_scan if profile == 'Standard' else scan
             target=Target.parse(self.url.get()); dns=domain_name(self.dns.get()) if self.dns.get().strip() else ''; pid=self.store.project(self.project.get()); name=self.project.get().strip()
         except (ValueError,PermissionError) as e:messagebox.showerror('Cannot start',str(e));return
         self.progress.configure(mode='indeterminate')
@@ -208,7 +218,7 @@ class App(tk.Tk):
         cancel, queue = self.cancel_event, self.queue
         try:
             self.job = self.orchestrator.submit(
-                lambda: scan(target.url, authorized=True, cancel=cancel, dns_domain=dns).to_dict(),
+                lambda: operation(target.url, authorized=True, cancel=cancel, dns_domain=dns).to_dict(),
                 lambda result, error: queue.put((pid, name, result, error)), cancel)
             self.status.set('Queued; one check runs at a time.')
         except RuntimeError as exc:
