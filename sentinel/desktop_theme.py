@@ -76,41 +76,41 @@ def configure_theme(root):
     style.configure('Header.TFrame', background=HEADER)
     style.configure('Brand.TLabel', background=HEADER, foreground=INK, font=('Segoe UI Semibold', 13))
     style.configure('NavCaption.TLabel', background=HEADER, foreground=MUTED, font=('Segoe UI', 9))
-    style.configure('WorkspaceTitle.TLabel', background=CANVAS, foreground=INK, font=('Segoe UI Semibold', 21))
+    style.configure('WorkspaceTitle.TLabel', background=CANVAS, foreground=INK, font=('Segoe UI Semibold', 18))
     style.configure('Section.TLabel', foreground=MUTED, font=('Segoe UI Semibold', 9))
     style.configure('Scan.Horizontal.TProgressbar', background=ACCENT, troughcolor=RAISED,
                     borderwidth=0, thickness=4, lightcolor=ACCENT, darkcolor=ACCENT)
     style.configure('Title.TLabel', font=('Segoe UI Semibold', 13))
     style.configure('Muted.TLabel', foreground=MUTED)
-    style.configure('TEntry', padding=(9, 7), borderwidth=1, relief='flat')
-    style.configure('TCombobox', padding=(9, 7), borderwidth=1, relief='flat',
+    style.configure('TEntry', padding=(8, 4), borderwidth=1, relief='flat')
+    style.configure('TCombobox', padding=(8, 4), borderwidth=1, relief='flat',
                     selectbackground=SELECT, selectforeground=INK)
     style.map('TEntry', bordercolor=[('focus', '#777780')])
     style.map('TCombobox', fieldbackground=[('readonly', SURFACE)],
               bordercolor=[('focus', '#777780')], selectbackground=[('readonly', SURFACE)])
-    _rounded_button(root, style, 'Soft', (RAISED, '#39393f', '#222227', SURFACE, RAISED), (13, 8))
+    _rounded_button(root, style, 'Soft', (RAISED, '#39393f', '#222227', SURFACE, RAISED), (11, 5))
     style.layout('TButton', style.layout('Soft.TButton'))
-    style.configure('TButton', padding=(13, 8), foreground=INK)
+    style.configure('TButton', padding=(11, 5), foreground=INK)
     style.map('TButton', foreground=[('disabled', '#777780')])
-    _rounded_button(root, style, 'Nav', (HEADER, RAISED, SURFACE, HEADER, RAISED), (11, 9), anchor='w')
+    _rounded_button(root, style, 'Nav', (HEADER, RAISED, SURFACE, HEADER, RAISED), (10, 6), anchor='w')
     _rounded_button(root, style, 'Primary', (ACCENT, '#eeeef2', '#bcbcc4', RAISED, ACCENT),
-                    (15, 8), foreground='#1b1b20')
-    style.configure('Treeview', background=SURFACE, fieldbackground=SURFACE, rowheight=30,
+                    (13, 5), foreground='#1b1b20')
+    style.configure('Treeview', background=SURFACE, fieldbackground=SURFACE, rowheight=25,
                     borderwidth=0, relief='flat')
     style.configure('Treeview.Heading', background=PANEL, foreground=MUTED,
-                    font=('Segoe UI Semibold', 9), padding=(9, 7), relief='flat', borderwidth=0)
+                    font=('Segoe UI Semibold', 9), padding=(8, 4), relief='flat', borderwidth=0)
     style.map('Treeview', background=[('selected', SELECT)], foreground=[('selected', INK)])
     style.map('Treeview.Heading', background=[('active', RAISED)])
     style.configure('Vertical.TScrollbar', troughcolor=SURFACE, background='#414147',
                     arrowsize=10, bordercolor=SURFACE, lightcolor=SURFACE, darkcolor=SURFACE,
                     gripcount=0, borderwidth=0, relief='flat')
-    style.configure('TNotebook', borderwidth=0, tabmargins=(0, 0, 0, 6))
-    style.configure('TNotebook.Tab', padding=(14, 9), borderwidth=0,
+    style.configure('TNotebook', borderwidth=0, tabmargins=(0, 0, 0, 3))
+    style.configure('TNotebook.Tab', padding=(12, 5), borderwidth=0,
                     bordercolor=PANEL, lightcolor=PANEL, darkcolor=PANEL)
     style.map('TNotebook.Tab', background=[('selected', RAISED), ('active', '#303035'), ('!selected', PANEL)],
               foreground=[('selected', INK), ('!selected', MUTED)])
-    style.configure('TCheckbutton', padding=(3, 3))
-    style.configure('TRadiobutton', padding=(3, 3))
+    style.configure('TCheckbutton', padding=(3, 1))
+    style.configure('TRadiobutton', padding=(3, 1))
     style.configure('TSeparator', background=LINE)
 
 
@@ -118,7 +118,7 @@ def detail_box(parent, height=8):
     return tk.Text(parent, height=height, wrap='word', background=SURFACE, foreground=INK,
                    selectbackground=SELECT, selectforeground=INK, relief='flat',
                    highlightthickness=1, highlightbackground=LINE, highlightcolor='#777780',
-                   font=('Segoe UI', 10), padx=13, pady=12, spacing1=2, spacing3=3)
+                   font=('Segoe UI', 10), padx=10, pady=8, spacing1=2, spacing3=3)
 
 
 def scrollable(parent, widget):

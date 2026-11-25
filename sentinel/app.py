@@ -29,8 +29,8 @@ class App(tk.Tk):
             raise DesktopUnavailable(str(exc)) from exc
         watch_poll(self)
         self.title('Sentinel')
-        self.geometry('1280x780')
-        self.minsize(1000, 680)
+        self.geometry('1160x700')
+        self.minsize(1000, 650)
         configure_theme(self)
         self.orchestrator = for_app(self)
         self.store = Store()
@@ -60,10 +60,10 @@ class App(tk.Tk):
         self.remediation_updated = tk.StringVar(value='')
         shell = ttk.Frame(self, style='Canvas.TFrame')
         shell.pack(fill='both', expand=True)
-        self.navigation = ttk.Frame(shell, padding=(12, 16), style='Header.TFrame', width=168)
+        self.navigation = ttk.Frame(shell, padding=(10, 12), style='Header.TFrame', width=168)
         self.navigation.pack(side='left', fill='y')
         ttk.Label(self.navigation, text='SENTINEL', style='Brand.TLabel').pack(anchor='w', pady=(0, 4))
-        ttk.Label(self.navigation, text='Security workspace', style='NavCaption.TLabel').pack(anchor='w', pady=(0, 22))
+        ttk.Label(self.navigation, text='Security workspace', style='NavCaption.TLabel').pack(anchor='w', pady=(0, 12))
         self.nav_buttons = {}
         for label, command, style in (
             ('New assessment', self.open_guided, 'Primary.TButton'),
@@ -74,14 +74,14 @@ class App(tk.Tk):
             ('Local utilities', self.open_local_utilities, 'Nav.TButton'),
         ):
             button = ttk.Button(self.navigation, text=label, command=command, style=style)
-            button.pack(fill='x', pady=(0, 6))
+            button.pack(fill='x', pady=(0, 3))
             self.nav_buttons[label] = button
         if os.name == 'nt':
             button = ttk.Button(self.navigation, text='Tool setup', command=self.open_tool_setup, style='Nav.TButton')
-            button.pack(fill='x', pady=(0, 6))
+            button.pack(fill='x', pady=(0, 3))
             self.nav_buttons['Tool setup'] = button
         ttk.Label(self.navigation, text='LOCAL WORKSPACE', style='NavCaption.TLabel').pack(side='bottom', anchor='w')
-        workspace = ttk.Frame(shell, padding=(16, 12), style='Canvas.TFrame')
+        workspace = ttk.Frame(shell, padding=(12, 8), style='Canvas.TFrame')
         workspace.pack(side='left', fill='both', expand=True)
         ttk.Label(workspace, text='Website assessment', style='WorkspaceTitle.TLabel').pack(anchor='w')
         ttk.Label(workspace, text='Assess an authorized website, inspect evidence and track improvements.',
@@ -94,8 +94,8 @@ class App(tk.Tk):
         self.poll_timer = self.after(100, self.poll)
 
     def build_assessment_form(self, parent):
-        form = ttk.Frame(parent, padding=(14, 10), style='Card.TFrame')
-        form.pack(fill='x', pady=(0, 10))
+        form = ttk.Frame(parent, padding=(10, 7), style='Card.TFrame')
+        form.pack(fill='x', pady=(0, 6))
         form.columnconfigure(1, weight=1)
         ttk.Label(form, text='Project', style='Muted.TLabel').grid(row=0, column=0, sticky='w', padx=(0, 8))
         ttk.Label(form, text='Website URL', style='Muted.TLabel').grid(row=0, column=1, sticky='w')

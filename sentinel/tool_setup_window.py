@@ -17,8 +17,8 @@ class ToolSetupWindow(tk.Toplevel):
         super().__init__(tools, name='tool_setup')
         self.tools = tools
         self.title('Sentinel | Tool control center')
-        self.geometry('820x780')
-        self.minsize(640, 540)
+        self.geometry('800x560')
+        self.minsize(740, 500)
         self.orchestrator = for_app(tools.app)
         self.queue = Queue()
         self.cancel = Event()
@@ -32,12 +32,19 @@ class ToolSetupWindow(tk.Toplevel):
         watch_poll(self)
         bind_escape(self, self.close)
         self.protocol('WM_DELETE_WINDOW', self.close)
-        body = ttk.Frame(self, padding=18)
+        body = ttk.Frame(self, padding=10)
         body.pack(fill='both', expand=True)
         ttk.Label(body, text='Tool control center', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(body, text='Local inventory • Detection is not proof that a scan will work.',
+        self.pages = ttk.Notebook(body)
+        self.pages.pack(fill='both', expand=True)
+        self.pages.enable_traversal()
+        inventory_page = self.inventory_page = ttk.Frame(self.pages, padding=8)
+        install_page = self.install_page = ttk.Frame(self.pages, padding=8)
+        self.pages.add(inventory_page, text='Tool status')
+        self.pages.add(install_page, text='Install / update')
+        ttk.Label(inventory_page, text='Local inventory • Detection is not proof that a scan will work.',
                   style='Muted.TLabel').pack(anchor='w', pady=(3, 8))
-        table = ttk.Frame(body)
+        table = ttk.Frame(inventory_page)
         table.pack(fill='both', expand=True)
         self.tree = ttk.Treeview(table, columns=('name', 'state'), show='headings', height=7)
         self.tree.heading('name', text='Component')
@@ -47,10 +54,10 @@ class ToolSetupWindow(tk.Toplevel):
         scrollable(table, self.tree)
         self.tree.bind('<<TreeviewSelect>>', self.selected)
         self.detail = tk.StringVar(value='Refresh to inspect the local environment.')
-        ttk.Label(body, textvariable=self.detail, wraplength=740, justify='left',
-                  style='Muted.TLabel').pack(anchor='w', pady=6)
-        controls = ttk.Frame(body)
-        controls.pack(fill='x')
+        ttk.Label(inventory_page, textvariable=self.detail, wraplength=680, justify='left',
+                  style='Muted.TLabel').pack(side='bottom', fill='x', pady=4, before=table)
+        controls = ttk.Frame(inventory_page)
+        controls.pack(side='bottom', fill='x', before=table)
         self.refresh_button = ttk.Button(controls, text='Refresh status', command=self.refresh)
         self.refresh_button.pack(side='left')
         self.test_button = ttk.Button(controls, text='Test toolkit', command=self.test_installation)
@@ -61,31 +68,32 @@ class ToolSetupWindow(tk.Toplevel):
         self.selected_button.pack(side='left', padx=6)
         self.cancel_button = ttk.Button(controls, text='Cancel check', command=self.cancel_refresh, state='disabled')
         self.cancel_button.pack(side='left')
-        ttk.Separator(body).pack(fill='x', pady=10)
-        ttk.Label(body, text='Sentinel detects existing components and downloads missing ones. No VirtualBox or separate Kali installation is required.',
-                  wraplength=565).pack(anchor='w', pady=(6, 12))
+        ttk.Label(install_page, text='Prepare missing components. No separate Kali installation is required.',
+                  wraplength=680).pack(anchor='w', pady=(0, 5))
         self.options = []
-        for label, value in (('Recommended — Nmap and Kali toolkit', 'all'),
-                             ('Nmap — native Windows', 'nmap'),
-                             ('Docker Desktop — Linux runtime', 'docker'),
-                             ('Kali toolkit — WhatWeb and sslscan via Docker', 'toolkit'),
-                             ('ZAP — optional web security engine (larger download)', 'zap'),
-                             ('Check for ZAP updates', 'zap-update')):
-            radio = ttk.Radiobutton(body, text=label, value=value, variable=self.choice)
-            radio.pack(anchor='w', pady=4)
+        choices = ttk.Frame(install_page)
+        choices.pack(fill='x')
+        for i, (label, value) in enumerate((('Recommended: Nmap + toolkit', 'all'),
+                             ('Nmap for Windows', 'nmap'),
+                             ('Docker Desktop', 'docker'),
+                             ('Toolkit: WhatWeb + sslscan', 'toolkit'),
+                             ('ZAP (larger download)', 'zap'),
+                             ('Check for ZAP updates', 'zap-update'))):
+            radio = ttk.Radiobutton(choices, text=label, value=value, variable=self.choice)
+            radio.grid(row=i // 2, column=i % 2, sticky='w', padx=(0, 12), pady=2)
             self.options.append(radio)
-        ttk.Label(body, text='Internet access may be needed. Windows, Npcap and Docker may show administrator, license or restart prompts. Sentinel will not accept terms for you.',
-                  style='Muted.TLabel', wraplength=565).pack(anchor='w', pady=12)
-        self.button = ttk.Button(body, text='Detect and install missing components',
+        ttk.Label(install_page, text='Internet access may be needed. Windows, Npcap and Docker may show administrator, license or restart prompts. Sentinel will not accept terms for you.',
+                  style='Muted.TLabel', wraplength=680).pack(anchor='w', pady=5)
+        self.button = ttk.Button(install_page, text='Detect and install missing components',
                                  style='Primary.TButton', command=self.start)
         self.button.pack(anchor='w')
-        ttk.Label(body, textvariable=self.status, wraplength=595, justify='left').pack(anchor='w', pady=10)
+        ttk.Label(body, textvariable=self.status, wraplength=680, justify='left').pack(side='bottom', fill='x', pady=(4, 0), before=self.pages)
         self.recovery_title = tk.StringVar(value='')
         self.recovery_text = tk.StringVar(value='')
-        ttk.Label(body, textvariable=self.recovery_title, style='Title.TLabel').pack(anchor='w')
-        ttk.Label(body, textvariable=self.recovery_text, wraplength=740, justify='left',
+        ttk.Label(install_page, textvariable=self.recovery_title, style='Title.TLabel').pack(anchor='w')
+        ttk.Label(install_page, textvariable=self.recovery_text, wraplength=680, justify='left',
                   style='Muted.TLabel').pack(anchor='w', pady=(2, 4))
-        self.retry_button = ttk.Button(body, text='Try again', command=self.retry_setup, state='disabled')
+        self.retry_button = ttk.Button(install_page, text='Try again', command=self.retry_setup, state='disabled')
         self.retry_button.pack(anchor='w')
         self.poll_timer = self.after(100, self.poll)
         self.refresh()
@@ -179,6 +187,7 @@ class ToolSetupWindow(tk.Toplevel):
         except RuntimeError as exc:
             self.status.set(str(exc))
             return
+        self.pages.select(self.install_page)
         self.last_setup_kind = kind
         self.last_retry_allowed = False
         self.mode = 'setup'
