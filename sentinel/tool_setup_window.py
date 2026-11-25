@@ -8,6 +8,7 @@ from .ui_lifecycle import watch_poll, bind_escape
 from .tool_setup import setup
 from .tool_inventory import snapshot
 from .desktop_theme import scrollable
+from .setup_recovery import recovery
 
 
 class ToolSetupWindow(tk.Toplevel):
@@ -15,7 +16,7 @@ class ToolSetupWindow(tk.Toplevel):
         super().__init__(tools, name='tool_setup')
         self.tools = tools
         self.title('Sentinel | Tool control center')
-        self.geometry('820x700')
+        self.geometry('820x780')
         self.minsize(640, 540)
         self.orchestrator = for_app(tools.app)
         self.queue = Queue()
@@ -23,6 +24,8 @@ class ToolSetupWindow(tk.Toplevel):
         self.busy = False
         self.mode = None
         self.rows = []
+        self.last_setup_kind = None
+        self.last_retry_allowed = False
         self.status = tk.StringVar(value='Choose what Sentinel should prepare.')
         self.choice = tk.StringVar(value='all')
         watch_poll(self)
@@ -71,6 +74,13 @@ class ToolSetupWindow(tk.Toplevel):
                                  style='Primary.TButton', command=self.start)
         self.button.pack(anchor='w')
         ttk.Label(body, textvariable=self.status, wraplength=595, justify='left').pack(anchor='w', pady=10)
+        self.recovery_title = tk.StringVar(value='')
+        self.recovery_text = tk.StringVar(value='')
+        ttk.Label(body, textvariable=self.recovery_title, style='Title.TLabel').pack(anchor='w')
+        ttk.Label(body, textvariable=self.recovery_text, wraplength=740, justify='left',
+                  style='Muted.TLabel').pack(anchor='w', pady=(2, 4))
+        self.retry_button = ttk.Button(body, text='Try again', command=self.retry_setup, state='disabled')
+        self.retry_button.pack(anchor='w')
         self.poll_timer = self.after(100, self.poll)
         self.refresh()
 
@@ -113,7 +123,13 @@ class ToolSetupWindow(tk.Toplevel):
         for widget in [self.button, self.refresh_button, *self.options]:
             widget.state(['disabled'] if busy else ['!disabled'])
         self.cancel_button.configure(state='normal' if busy and self.mode == 'inventory' else 'disabled')
+        self.retry_button.state(['!disabled'] if not busy and self.last_retry_allowed else ['disabled'])
         self.selected()
+
+    def retry_setup(self):
+        if not self.busy and self.last_setup_kind:
+            self.choice.set(self.last_setup_kind)
+            self.start()
 
     def start(self):
         if self.busy:
@@ -135,7 +151,12 @@ class ToolSetupWindow(tk.Toplevel):
         except RuntimeError as exc:
             self.status.set(str(exc))
             return
+        self.last_setup_kind = kind
+        self.last_retry_allowed = False
         self.mode = 'setup'
+        self.recovery_title.set('')
+        self.recovery_text.set('')
+        self.retry_button.state(['disabled'])
         self.set_busy(True)
         self.status.set('Preparing selected components. Complete any vendor prompts that appear.')
 
@@ -159,8 +180,14 @@ class ToolSetupWindow(tk.Toplevel):
                 else:
                     self.status.set(error or 'Status check cancelled or incomplete. Previous inventory may be stale.')
             else:
-                self.status.set(error or result.get('error') or result['message'])
-            if mode == 'setup' and not error and result.get('status') == 'completed':
+                outcome = result or {'status': 'failed'}
+                self.status.set(error or outcome.get('error') or outcome.get('message', 'Setup could not finish.'))
+                advice = recovery(outcome)
+                self.recovery_title.set(advice.heading)
+                self.recovery_text.set(advice.instruction)
+                self.last_retry_allowed = advice.retry
+                self.retry_button.state(['!disabled'] if advice.retry else ['disabled'])
+            if mode == 'setup' and not error and result and result.get('status') == 'completed':
                 if result.get('backend') == 'docker' and not self.tools.busy and not self.tools.wsl_busy and self.tools.tool.id in ('whatweb', 'sslscan'):
                     self.tools.backend.set('docker')
                     self.tools.environment.set(result['environment'])
