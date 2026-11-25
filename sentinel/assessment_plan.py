@@ -52,7 +52,7 @@ def website_plan(value, profile, rows):
     if profile == 'Standard':
         if target.scheme == 'https':
             steps.append(recommend(sslscan.SPEC, 'TLS protocol and cipher review',
-                                   'Additional TLS handshakes on the authorized endpoint.'))
+                                   'Optional manual sslscan review; not part of automated Standard.'))
         else:
             steps.append(PlanStep('TLS protocol and cipher review', 'Not applicable',
                                   'HTTPS required.', 'No automatic upgrade or alternate target.'))
@@ -62,11 +62,15 @@ def website_plan(value, profile, rows):
                                   'Hostname-based external checks lack strict IP egress enforcement.'))
         else:
             steps.append(recommend(whatweb.SPEC, 'Technology identification',
-                                   'Passive identification on the exact authorized IP URL.'))
+                                   'Optional manual passive identification on the exact authorized IP URL.'))
 
+        steps.append(PlanStep('Modern TLS verification', 'Built-in Python',
+                              'TLS 1.2 and 1.3; same connected address and port, certificate verification retained.'
+                              if target.scheme == 'https' else 'Not applicable to HTTP.',
+                              'Failed negotiation is inconclusive; no legacy protocol or cipher enumeration.'))
     return AssessmentPlan(target.url, profile, tuple(steps), (
         'Recommendations are advisory, not authorization or execution readiness.',
-        'Only the existing quick check is available directly from this plan.',
+        'Quick and native Standard are available; external candidate checks are manual only.',
         'No DNS lookup, redirect following, discovery or target contact during planning.',
         'Site-wide crawling, injection, authenticated testing and exploit validation are not covered.',
         'External tools require separate review and authorization in Security tools.',
