@@ -11,6 +11,7 @@ from .ui_lifecycle import watch_poll, watch_variables
 
 REPORT_FORMATS = {
     'ZAP · Traditional JSON': ('zap', '*.json'),
+    'ZAP · Detailed alert review': ('zap-detail', '*.json'),
     'Nmap · XML': ('nmap', '*.xml'),
     'Wireshark · Packet-list CSV': ('wireshark', '*.csv'),
 }
