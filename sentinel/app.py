@@ -29,7 +29,7 @@ class App(tk.Tk):
         watch_poll(self)
         self.title('Sentinel')
         self.geometry('1280x780')
-        self.minsize(960, 620)
+        self.minsize(1000, 680)
         configure_theme(self)
         self.orchestrator = for_app(self)
         self.store = Store()
@@ -57,20 +57,30 @@ class App(tk.Tk):
         self.selection_meta = tk.StringVar(value='Choose a row to inspect its evidence.')
         self.remediation_state = tk.StringVar(value='Open')
         self.remediation_updated = tk.StringVar(value='')
-        header = ttk.Frame(self, padding=(16, 7), style='Header.TFrame')
-        header.pack(fill='x')
-        mark = tk.Canvas(header, width=18, height=18, bg='#0e1012', highlightthickness=0)
-        mark.pack(side='left', padx=(0, 6))
-        mark.create_oval(2, 2, 15, 15, outline='#a6ded0', width=2)
-        mark.create_oval(7, 7, 10, 10, fill='#eef3f5', outline='')
-        ttk.Label(header, text='SENTINEL', style='Brand.TLabel').pack(side='left')
-        for label, command in [('Local utilities', self.open_local_utilities),
-                               ('Dependencies', self.open_dependencies), ('Security tools', self.open_network),
-                               ('New assessment', self.open_guided)]:
-            ttk.Button(header, text=label, command=command).pack(side='right', padx=(6, 0))
-
-        workspace = ttk.Frame(self, padding=(12, 12), style='Canvas.TFrame')
-        workspace.pack(fill='both', expand=True)
+        shell = ttk.Frame(self, style='Canvas.TFrame')
+        shell.pack(fill='both', expand=True)
+        self.navigation = ttk.Frame(shell, padding=(12, 16), style='Header.TFrame', width=168)
+        self.navigation.pack(side='left', fill='y')
+        ttk.Label(self.navigation, text='SENTINEL', style='Brand.TLabel').pack(anchor='w', pady=(0, 4))
+        ttk.Label(self.navigation, text='Security workspace', style='NavCaption.TLabel').pack(anchor='w', pady=(0, 22))
+        self.nav_buttons = {}
+        for label, command, style in (
+            ('New assessment', self.open_guided, 'Primary.TButton'),
+            ('Findings', lambda: self.show_workspace('findings'), 'Nav.TButton'),
+            ('Project history', lambda: self.show_workspace('history'), 'Nav.TButton'),
+            ('Security tools', self.open_network, 'Nav.TButton'),
+            ('Dependencies', self.open_dependencies, 'Nav.TButton'),
+            ('Local utilities', self.open_local_utilities, 'Nav.TButton'),
+        ):
+            button = ttk.Button(self.navigation, text=label, command=command, style=style)
+            button.pack(fill='x', pady=(0, 6))
+            self.nav_buttons[label] = button
+        ttk.Label(self.navigation, text='LOCAL WORKSPACE', style='NavCaption.TLabel').pack(side='bottom', anchor='w')
+        workspace = ttk.Frame(shell, padding=(16, 12), style='Canvas.TFrame')
+        workspace.pack(side='left', fill='both', expand=True)
+        ttk.Label(workspace, text='Website assessment', style='WorkspaceTitle.TLabel').pack(anchor='w')
+        ttk.Label(workspace, text='Assess an authorized website, inspect evidence and track improvements.',
+                  style='Canvas.TLabel', wraplength=760).pack(anchor='w', pady=(2, 12))
         self.build_overview(workspace)
         self.build_assessment_form(workspace)
         self.build_results(workspace)
@@ -80,27 +90,29 @@ class App(tk.Tk):
 
     def build_assessment_form(self, parent):
         form = ttk.Frame(parent, padding=(14, 10), style='Card.TFrame')
-        form.pack(fill='x', pady=(0, 9))
+        form.pack(fill='x', pady=(0, 10))
         form.columnconfigure(1, weight=1)
-        for column, label in enumerate(('Project', 'Website URL', 'Optional DNS domain')):
-            ttk.Label(form, text=label, style='Muted.TLabel').grid(row=0, column=column, sticky='w', padx=(0, 8))
-        self.project_box = ttk.Combobox(form, textvariable=self.project, values=self.store.projects(), width=20)
+        ttk.Label(form, text='Project', style='Muted.TLabel').grid(row=0, column=0, sticky='w', padx=(0, 8))
+        ttk.Label(form, text='Website URL', style='Muted.TLabel').grid(row=0, column=1, sticky='w')
+        self.project_box = ttk.Combobox(form, textvariable=self.project, values=self.store.projects(), width=17)
         self.project_box.grid(row=1, column=0, sticky='ew', padx=(0, 8), pady=(3, 0))
         self.project_box.bind('<<ComboboxSelected>>', lambda event: self.load_history())
-        ttk.Entry(form, textvariable=self.url).grid(row=1, column=1, sticky='ew', padx=(0, 8), pady=(3, 0))
-        ttk.Entry(form, textvariable=self.dns, width=23).grid(row=1, column=2, sticky='ew', padx=(0, 8), pady=(3, 0))
+        self.target_entry = ttk.Entry(form, textvariable=self.url)
+        self.target_entry.grid(row=1, column=1, sticky='ew', padx=(0, 8), pady=(3, 0))
         self.run_btn = ttk.Button(form, text='Run assessment', command=self.run, style='Primary.TButton')
-        self.run_btn.grid(row=1, column=3, sticky='ew', padx=(0, 6), pady=(3, 0))
+        self.run_btn.grid(row=1, column=2, sticky='ew', padx=(0, 6), pady=(3, 0))
         self.stop_btn = ttk.Button(form, text='Stop', command=self.stop, state='disabled')
-        self.stop_btn.grid(row=1, column=4, sticky='ew', pady=(3, 0))
-        self.auth_check = ttk.Checkbutton(form, text='I have permission for this URL, DNS domain and profile (remembered until scope changes).',
-                                          variable=self.auth)
-        self.auth_check.grid(row=2, column=0, columnspan=5, sticky='w', pady=(8, 0))
-        ttk.Label(form, text='Assessment depth', style='Muted.TLabel').grid(row=3, column=0, sticky='w', pady=(6, 0))
+        self.stop_btn.grid(row=1, column=3, sticky='ew', pady=(3, 0))
+        ttk.Label(form, text='Assessment depth', style='Muted.TLabel').grid(row=2, column=0, sticky='w', pady=(9, 0))
+        ttk.Label(form, text='Optional DNS domain', style='Muted.TLabel').grid(row=2, column=1, sticky='w', pady=(9, 0))
         ttk.Combobox(form, textvariable=self.assessment_profile, values=('Quick', 'Standard'),
-                     width=12, state='readonly').grid(row=3, column=1, sticky='w', pady=(6, 0))
-        ttk.Label(form, text='Standard adds same-endpoint TLS 1.2/1.3 verification.', style='Muted.TLabel').grid(
-            row=3, column=2, columnspan=3, sticky='w', pady=(6, 0))
+                     width=12, state='readonly').grid(row=3, column=0, sticky='ew', padx=(0, 8))
+        ttk.Entry(form, textvariable=self.dns).grid(row=3, column=1, sticky='ew', padx=(0, 8))
+        ttk.Label(form, text='Standard adds modern TLS checks.', style='Muted.TLabel',
+                  wraplength=170).grid(row=3, column=2, columnspan=2, sticky='w')
+        self.auth_check = ttk.Checkbutton(form, text='I have permission for this scope (remembered until settings change).',
+                                          variable=self.auth)
+        self.auth_check.grid(row=4, column=0, columnspan=4, sticky='w', pady=(8, 0))
         watch_authorized_scope(self, (self.project, self.url, self.dns, self.assessment_profile), self.auth)
 
     def build_overview(self, parent):
@@ -123,71 +135,77 @@ class App(tk.Tk):
     def build_results(self, parent):
         panes = ttk.Panedwindow(parent, orient='horizontal')
         panes.pack(fill='both', expand=True)
-        left = ttk.Frame(panes, padding=12, width=440, style='Card.TFrame')
-        middle = ttk.Frame(panes, padding=12, width=210, style='Card.TFrame')
-        right = ttk.Frame(panes, padding=12, width=350, style='Card.TFrame')
-        for panel, weight in [(left, 5), (middle, 2), (right, 4)]:
-            panes.add(panel, weight=weight)
+        left = ttk.Frame(panes, padding=10, style='Card.TFrame')
+        right = ttk.Frame(panes, padding=10, style='Card.TFrame')
+        panes.add(left, weight=4)
+        panes.add(right, weight=5)
+        self.workspace_tabs = ttk.Notebook(left)
+        self.workspace_tabs.pack(fill='both', expand=True)
+        self.findings_page = ttk.Frame(self.workspace_tabs, padding=6)
+        self.history_page = ttk.Frame(self.workspace_tabs, padding=6)
+        self.workspace_tabs.add(self.findings_page, text='Findings')
+        self.workspace_tabs.add(self.history_page, text='History')
 
-        ttk.Label(left, text='Findings', style='Title.TLabel').pack(anchor='w', pady=(0, 8))
-        findings = ttk.Frame(left)
-        findings.pack(fill='both', expand=True)
-        ttk.Label(middle, text='SELECTED FINDING', style='Section.TLabel').pack(anchor='w')
-        ttk.Label(middle, textvariable=self.selection_title, style='Title.TLabel',
-                  wraplength=180, justify='left').pack(anchor='w', pady=(10, 5))
-        ttk.Label(middle, textvariable=self.selection_meta, style='Muted.TLabel',
-                  wraplength=175, justify='left').pack(anchor='w')
-        ttk.Label(middle, text='MANUAL REMEDIATION', style='Section.TLabel').pack(anchor='w', pady=(12, 4))
-        self.remediation_box = ttk.Combobox(middle, values=REMEDIATION_STATES,
-                                           textvariable=self.remediation_state, state='disabled', width=16)
-        self.remediation_box.pack(fill='x')
-        self.remediation_button = ttk.Button(middle, text='Save status', command=self.save_remediation,
-                                             state='disabled')
-        self.remediation_button.pack(fill='x', pady=(4, 0))
-        ttk.Label(middle, textvariable=self.remediation_updated, style='Muted.TLabel',
-                  wraplength=175, justify='left').pack(anchor='w', pady=(4, 0))
-        actions = ttk.Frame(middle)
-        actions.pack(side='bottom', fill='x')
-        ttk.Label(actions, text='ASSESSMENT ACTIONS', style='Section.TLabel').pack(anchor='w', pady=(0, 8))
-        self.result_buttons = []
-        for label, command in [('Compare previous', self.diff), ('Retest evidence', self.retest_evidence), ('Export HTML', self.export),
-                               ('Export JSON', self.export_json)]:
-            button = ttk.Button(actions, text=label, command=command, state='disabled')
-            button.pack(fill='x', pady=(0, 5))
-            self.result_buttons.append(button)
+        self.findings = ttk.Treeview(self.findings_page, columns=('title', 'severity'), show='headings', height=8)
+        self.findings.heading('severity', text='Risk')
+        self.findings.heading('title', text='Finding')
+        self.findings.column('severity', width=72, minwidth=60, stretch=False)
+        self.findings.column('title', width=225, minwidth=90)
+        for severity, color in SEVERITY_COLORS.items():
+            self.findings.tag_configure(severity, foreground=color)
+        scrollable(self.findings_page, self.findings)
+        self.findings.bind('<<TreeviewSelect>>', self.finding_selected)
 
-        ttk.Label(right, text='Evidence & remediation', style='Title.TLabel').pack(anchor='w', pady=(0, 7))
-        detail = ttk.Frame(right)
-        detail.pack(fill='both', expand=True)
-        heading = ttk.Frame(right)
-        heading.pack(fill='x', pady=(12, 5))
-        ttk.Label(heading, text='Project history', style='Title.TLabel').pack(side='left')
-        ttk.Button(heading, text='Load history', command=self.load_history).pack(side='right')
-        history = ttk.Frame(right)
+        history_actions = ttk.Frame(self.history_page)
+        history_actions.pack(fill='x', pady=(0, 6))
+        ttk.Button(history_actions, text='Refresh', command=self.load_history).pack(side='left')
+        ttk.Button(history_actions, text='View findings', command=lambda: self.show_workspace('findings')).pack(side='right')
+        history = ttk.Frame(self.history_page)
         history.pack(fill='both', expand=True)
-
         self.history = ttk.Treeview(history, columns=('time', 'status'), show='headings', height=8)
         self.history.heading('time', text='UTC time')
         self.history.heading('status', text='Status')
-        self.history.column('time', width=135, minwidth=80)
-        self.history.column('status', width=76, minwidth=50)
+        self.history.column('time', width=150, minwidth=100)
+        self.history.column('status', width=80, minwidth=60)
         scrollable(history, self.history)
         self.history.bind('<<TreeviewSelect>>', self.history_selected)
+        self.history.bind('<Double-1>', lambda event: self.show_workspace('findings'))
 
-        self.findings = ttk.Treeview(findings, columns=('title', 'severity'), show='headings', height=8)
-        self.findings.heading('severity', text='Severity')
-        self.findings.heading('title', text='Finding')
-        self.findings.column('severity', width=78, minwidth=63, stretch=False)
-        self.findings.column('title', width=235, minwidth=90)
-        for severity, color in SEVERITY_COLORS.items():
-            self.findings.tag_configure(severity, foreground=color)
-        scrollable(findings, self.findings)
-        self.findings.bind('<<TreeviewSelect>>', self.finding_selected)
-
-        self.detail = detail_box(detail)
+        ttk.Label(right, textvariable=self.selection_title, style='Title.TLabel',
+                  wraplength=390, justify='left').pack(anchor='w', pady=(0, 3))
+        ttk.Label(right, textvariable=self.selection_meta, style='Muted.TLabel',
+                  wraplength=390, justify='left').pack(anchor='w', pady=(0, 7))
+        controls = ttk.Frame(right)
+        controls.pack(side='bottom', fill='x')
+        ttk.Label(controls, text='Manual remediation', style='Muted.TLabel').pack(anchor='w', pady=(6, 2))
+        status_row = ttk.Frame(controls)
+        status_row.pack(fill='x')
+        self.remediation_box = ttk.Combobox(status_row, values=REMEDIATION_STATES,
+                                           textvariable=self.remediation_state, state='disabled', width=17)
+        self.remediation_box.pack(side='left', fill='x', expand=True)
+        self.remediation_button = ttk.Button(status_row, text='Save status', command=self.save_remediation,
+                                             state='disabled')
+        self.remediation_button.pack(side='left', padx=(6, 0))
+        ttk.Label(controls, textvariable=self.remediation_updated, style='Muted.TLabel',
+                  wraplength=390).pack(anchor='w', pady=3)
+        actions = ttk.Frame(controls)
+        actions.pack(fill='x', pady=(5, 0))
+        self.result_buttons = []
+        for i, (label, command) in enumerate((('Compare previous', self.diff), ('Retest evidence', self.retest_evidence),
+                                             ('Export HTML', self.export), ('Export JSON', self.export_json))):
+            button = ttk.Button(actions, text=label, command=command, state='disabled')
+            button.grid(row=i // 2, column=i % 2, sticky='ew', padx=2, pady=2)
+            actions.columnconfigure(i % 2, weight=1)
+            self.result_buttons.append(button)
+        detail = ttk.Frame(right)
+        detail.pack(fill='both', expand=True)
+        self.detail = detail_box(detail, height=6)
         self.detail.configure(width=26)
         scrollable(detail, self.detail)
         self.set_detail('Run an assessment or open project history to inspect findings.')
+
+    def show_workspace(self, page):
+        self.workspace_tabs.select(self.history_page if page == 'history' else self.findings_page)
 
     def open_guided(self):
         from .guided_window import GuidedWindow
