@@ -105,14 +105,14 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
         if cancel.is_set():
             return result('cancelled', '\n'.join(stages + ['Setup stopped; installed components are retained.']))
         return result(final.get('status', 'partial'), '\n'.join(stages),
-                      **{key: final[key] for key in ('backend', 'environment') if key in final})
+                      **{key: final[key] for key in ('backend', 'environment', 'next_action') if key in final})
     if kind == 'nmap':
         if not find_nmap():
             install('nmap')
         if cancel.is_set():
             return result('cancelled', 'Setup stopped; installed components are retained.')
         if not find_nmap():
-            return result('partial', 'Nmap not detected yet. Restart Sentinel after the installer finishes.')
+            return result('partial', 'Nmap not detected yet. Restart Sentinel after the installer finishes.', next_action='restart_app')
         return result('completed', 'Nmap executable detected. Native assessments are available; scan operation is not verified.')
 
     executable = find_docker()
@@ -122,12 +122,14 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
     if cancel.is_set():
         return result('cancelled', 'Setup stopped; installed components are retained.')
     if not executable:
-        return result('partial', 'Docker CLI not detected yet. Restart Windows or Sentinel after setup.')
+        return result('partial', 'Docker CLI not detected yet. Restart Windows or Sentinel after setup.', next_action='restart_app')
     prefix = local_docker_prefix(platform)
     prefix[0] = executable
     health = invoke(prefix + ['version', '--format', '{{.Server.Os}}'], 15, cancel)
+    if cancel.is_set():
+        return result('cancelled', 'Setup cancelled during Docker check.')
     if health.returncode != 0 or health.cancelled or health.timed_out or health.truncated or health.stdout.strip() != 'linux':
-        return result('partial', 'Docker installed or detected. Open Docker Desktop, review its terms, and start the Linux engine. Restart Windows if requested, then retry.')
+        return result('partial', 'Docker installed or detected. Open Docker Desktop, review its terms, and start the Linux engine. Restart Windows if requested, then retry.', next_action='start_docker')
     if kind == 'docker':
         return result('completed', 'Local Linux Docker engine responded. No scanner was launched.')
     if kind == 'zap':
@@ -140,7 +142,7 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
         remember(backend, bundle.preference_path())
     else:
         if not dockerfile.is_file():
-            return result('partial', 'Toolkit recipe unavailable. Use the official Sentinel installer or complete source checkout.')
+            return result('partial', 'Toolkit recipe unavailable. Use the official Sentinel installer or complete source checkout.', next_action='restore_files')
         saved_path = preference(dockerfile)
         saved = saved_source_backend(saved_path) if saved_path is not None else None
         if saved:
@@ -155,11 +157,11 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
         built = invoke(prefix + ['build', '--platform', 'linux/amd64', '--tag', tag,
                                  str(dockerfile.parent)], 1200, cancel)
         if built.returncode != 0 or built.cancelled or built.timed_out or built.truncated:
-            return result('partial', 'Kali toolkit build did not finish. Check Docker and internet access, then retry.')
+            return result('cancelled' if cancel.is_set() else 'partial', 'Kali toolkit build did not finish. Check Docker and internet access, then retry.', next_action='retry')
         inspected = invoke(prefix + ['image', 'inspect', '--format', '{{.Id}}', tag], 15, cancel)
         image = inspected.stdout.strip()
         if inspected.returncode != 0 or inspected.cancelled or inspected.timed_out or inspected.truncated or not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
-            return result('partial', 'The built image could not be verified.')
+            return result('partial', 'The built image could not be verified.', next_action='retry')
         backend = Backend('docker', image)
         if saved_path is not None and not cancel.is_set():
             remember(backend, saved_path)
