@@ -153,7 +153,7 @@ class ToolsWindow(tk.Toplevel):
         self.engine_hint.set({
             'native': 'Windows/local executable. No Kali setup needed if the tool is installed.',
             'wsl': 'Kali or another installed WSL distribution. Guest cancellation is limited.',
-            'docker': 'Linux container using a local immutable image. Docker must already be running.',
+            'docker': 'Local Docker daemon and immutable image. Network egress is not isolated to the target.',
         }[kind])
         self.saved_toolkit_button.state(['disabled'] if self.busy or self.wsl_busy or
                                          self.tool.id not in bundle.BUNDLED_TOOLS else ['!disabled'])
