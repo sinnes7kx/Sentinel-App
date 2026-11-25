@@ -13,6 +13,8 @@ from unittest.mock import patch
 from sentinel.app import App
 from sentinel.store import Store
 from sentinel.tools_window import ToolsWindow
+from sentinel.tools.backends import Backend
+from sentinel.tools import TOOLS
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -50,6 +52,11 @@ class ApplicationTests(unittest.TestCase):
                     self.assertIn('New assessment', app.nav_buttons)
                     tools = ToolsWindow(app); tools.withdraw()
                     self.assertIs(tools.orchestrator, app.orchestrator)
+                    self.assertEqual(tools.tabs.select(), str(tools.setup_page))
+                    tools.tabs.select(tools.results_page)
+                    self.assertEqual(tools.tabs.select(), str(tools.results_page))
+                    tools.tabs.select(tools.setup_page)
+                    self.assertIn('local executable', tools.engine_hint.get())
                     tools.auth.set(True); tools.target.set('127.0.0.1')
                     self.assertFalse(tools.auth.get())
                     tools.auth.set(True)
@@ -75,6 +82,17 @@ class ApplicationTests(unittest.TestCase):
                     tools.environment.set('fixture-image')
                     tools.backend.set('wsl')
                     self.assertEqual(tools.environment.get(), 'kali-linux')
+                    tools.bundled = True
+                    tools.tool_name.set(next(t.name for t in TOOLS if t.id == 'whatweb'))
+                    tools.tool_changed()
+                    tools.auth.set(True)
+                    with patch('sentinel.tools_window.bundle.saved_backend', return_value=Backend('docker', 'sha256:' + 'a' * 64)):
+                        tools.use_saved_toolkit()
+                    self.assertEqual(tools.backend.get(), 'docker')
+                    self.assertEqual(tools.environment.get(), 'sha256:' + 'a' * 64)
+                    self.assertFalse(tools.auth.get())
+                    self.assertIn('not verified', tools.wsl_status.get())
+                    self.assertFalse(tools.busy)
                     timer = tools.poll_timer
                     tools.destroy()
                     self.assertNotIn(timer, app.tk.call('after', 'info'))
