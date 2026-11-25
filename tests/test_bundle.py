@@ -100,13 +100,13 @@ class OfflineToolkitTests(unittest.TestCase):
         ):
             with self.subTest(spec=spec.id):
                 def invoke(cmd, timeout, cancel):
-                    if cmd[1] == 'run':
+                    if cmd[3] == 'run':
                         self.assertIn(flag, cmd)
                         self.assertNotIn('--mount', cmd)
                         if spec.id == 'whatweb':
                             self.assertIn('--env=http_proxy=', cmd)
                             self.assertIn('--env=HTTP_PROXY=', cmd)
                         self.assertIn('--no-heartbleed' if spec.id == 'sslscan' else '--quiet', cmd)
-                    return RunResult(0, output, '')
+                    return RunResult(0, output if cmd[3] == 'run' else '', '')
                 result = spec.scan(url, profile, True, backend=Backend('docker', self.image), run=invoke)
                 self.assertEqual(result.status, 'completed')
