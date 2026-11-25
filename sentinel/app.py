@@ -131,7 +131,10 @@ class App(tk.Tk):
             card = ttk.Frame(overview, padding=(14, 10), style='Card.TFrame')
             card.grid(row=0, column=column, sticky='nsew', padx=(0, 0 if column == 3 else 8))
             ttk.Label(card, text=label, style='Muted.TLabel').pack(anchor='w')
-            ttk.Label(card, textvariable=value, style='Title.TLabel').pack(anchor='w', pady=(3, 0))
+            metric = ttk.Label(card, textvariable=value, style='Title.TLabel')
+            metric.pack(anchor='w', pady=(3, 0))
+            if value is self.highest:
+                self.highest_label = metric
         ttk.Label(parent, textvariable=self.status, style='Canvas.TLabel', anchor='center').pack(fill='x', pady=(8, 4))
         track = ttk.Frame(parent, height=4)
         track.pack(fill='x', pady=(0, 12))
@@ -391,6 +394,7 @@ class App(tk.Tk):
         if s and int(s[0]) in dict(self.records):self.show(dict(self.records)[int(s[0])],int(s[0]))
     def reset_inspector(self, has_assessment):
         self.highest.set('—')
+        self.highest_label.configure(style='Title.TLabel')
         self.remediation_box.configure(state='disabled')
         self.remediation_button.configure(state='disabled')
         self.remediation_state.set('Open')
@@ -409,7 +413,9 @@ class App(tk.Tk):
         self.findings.delete(*self.findings.get_children())
         self.reset_inspector(True)
         levels = {f['severity'].lower() for f in r['findings']}
-        self.highest.set(next((level.title() for level in SEVERITY_COLORS if level in levels), '—'))
+        highest = next((level for level in SEVERITY_COLORS if level in levels), None)
+        self.highest.set(highest.title() if highest else '—')
+        self.highest_label.configure(style=highest + '.Title.TLabel' if highest else 'Title.TLabel')
         coverage = r.get('coverage', {})
         connection = [coverage['tool']] if coverage.get('tool') else [
             f"HTTP {r['http_status']}" if r.get('http_status') else '', r.get('tls')]

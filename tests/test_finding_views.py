@@ -94,3 +94,16 @@ class FindingViewTests(unittest.TestCase):
         result['status'] = 'completed'
         self.assertIn('does not establish that the target is secure', html_report(result))
         self.assertIn('No finding-specific actions recorded', html_report(result))
+
+
+    def test_report_risk_classes_are_allowlisted(self):
+        levels = ('critical', 'high', 'medium', 'low', 'info', 'unrated" onclick="bad')
+        result = {'target': 'http://fixture.invalid/', 'started': '2026-01-01',
+                  'status': 'completed', 'http_status': 200, 'tls': None, 'error': '',
+                  'coverage': {}, 'findings': [finding(severity=level) for level in levels]}
+        html = html_report(result)
+        for level in ('critical', 'high', 'medium', 'low', 'info', 'unknown'):
+            self.assertIn('class="tile risk-' + level + '"', html)
+            self.assertIn('class="severity risk-' + level + '"', html)
+            self.assertIn('class="risk-' + level + '"', html)
+        self.assertNotIn('onclick="bad', html)
