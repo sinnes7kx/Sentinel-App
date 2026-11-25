@@ -4,17 +4,18 @@ from pathlib import Path
 from queue import Queue, Empty
 from threading import Event
 from .orchestration import for_app
-from .ui_lifecycle import watch_poll
+from .ui_lifecycle import watch_poll, bind_escape
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from .dependencies import assess
-from .desktop_theme import CANVAS, detail_box
+from .desktop_theme import CANVAS, detail_box, scrollable
 
 
 class DependencyWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         watch_poll(self)
+        bind_escape(self)
         self.title('Sentinel | Local dependency check')
         self.geometry('880x650')
         self.configure(background=CANVAS)
@@ -32,7 +33,8 @@ class DependencyWindow(tk.Toplevel):
         body = ttk.Frame(self, padding=20)
         body.pack(fill='both', expand=True)
         ttk.Label(body, text='Are my Python dependencies affected?', font=('Segoe UI', 16, 'bold')).pack(anchor='w')
-        ttk.Label(body, text='Compare a package inventory with advisory files you trust. Missing or unsupported information stays unknown.', wraplength=800).pack(anchor='w', pady=8)
+        ttk.Label(body, text='Choose a requirements.txt or pip inspect JSON file and a trusted local OSV advisory JSON array. No online lookup is performed.', wraplength=800).pack(anchor='w', pady=8)
+        ttk.Button(body, text='Load synthetic example', command=self.load_example).pack(anchor='w', pady=(0, 6))
         for label, variable in [('1. Choose your package inventory', self.inventory), ('2. Choose a local OSV advisory JSON array', self.feed)]:
             ttk.Label(body, text=label).pack(anchor='w')
             row = ttk.Frame(body)
@@ -53,12 +55,26 @@ class DependencyWindow(tk.Toplevel):
         self.tree = ttk.Treeview(body, columns=('package', 'version', 'result'), show='headings', height=8)
         for column, label in [('package', 'Package'), ('version', 'Version'), ('result', 'Result')]:
             self.tree.heading(column, text=label)
+        self.tree.configure(height=5)
         self.tree.pack(fill='both', expand=True)
         self.tree.bind('<<TreeviewSelect>>', self.selected)
-        self.detail = detail_box(body, height=9)
+        self.detail = detail_box(body, height=6)
         self.detail.pack(fill='both', expand=True, pady=8)
         self.say('Affected: an advisory matches this version.\nNo match in supplied feed: only these records were checked.\nUnknown: more information is needed.\n\nA result is not proof of exploitability or overall safety. Feed freshness is not verified.')
         self.poll_timer = self.after(100, self.poll)
+
+    def load_example(self):
+        if self.busy:
+            return
+        base = Path(__file__).resolve().parents[1] / 'examples' / 'dependencies'
+        inventory, feed = base / 'requirements.txt', base / 'advisories-synthetic.json'
+        if not inventory.is_file() or not feed.is_file():
+            self.status.set('Example files are not included in this installation.')
+            return
+        self.inventory.set(str(inventory))
+        self.feed.set(str(feed))
+        self.format.set('requirements')
+        self.status.set('Synthetic example loaded. Click Check these files to try it; not real vulnerability data.')
 
     def choose(self, variable):
         path = filedialog.askopenfilename(parent=self)
