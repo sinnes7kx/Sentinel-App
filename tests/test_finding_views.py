@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from sentinel.finding_views import finding_views, findings_summary, finding_detail
+from sentinel.finding_views import finding_views, findings_summary, finding_detail, priority_note
 from sentinel.report import html_report
 
 
@@ -62,3 +62,35 @@ class FindingViewTests(unittest.TestCase):
         self.assertNotIn('hidden-value', html)
         self.assertNotIn('hidden-value', finding_detail(finding_views(result)[0]))
         self.assertEqual(result['findings'][0]['evidence'], 'password=hidden-value')
+
+
+    def test_priority_uses_reported_risk_without_promoting_confidence(self):
+        f = finding(severity='critical', confidence='low')
+        self.assertEqual(priority_note(f)[0], 'Review immediately')
+        self.assertEqual(priority_note(finding(severity='info'))[0], 'Review context')
+        self.assertEqual(priority_note(finding(severity='unrated'))[0], 'Needs classification')
+        detail = finding_detail(finding_views({'findings': [f]})[0])
+        self.assertIn('Review immediately', detail)
+        self.assertIn('independent confirmation', detail)
+
+    def test_report_priority_order_and_links(self):
+        result = {'target':'http://fixture.invalid/', 'started':'2026-01-01',
+                  'status':'completed', 'http_status':200, 'tls':None, 'error':'',
+                  'coverage':{}, 'findings':[finding(title='Minor issue'), finding(title='Major issue', severity='high')]}
+        before = copy.deepcopy(result)
+        html = html_report(result)
+        self.assertLess(html.index('href="#finding-1"'), html.index('href="#finding-0"'))
+        self.assertIn('id="finding-1"', html)
+        self.assertIn('id="finding-0"', html)
+        self.assertIn('Review promptly', html)
+        self.assertIn('Results at a glance', html)
+        self.assertEqual(result, before)
+
+    def test_incomplete_and_empty_reports_do_not_imply_security(self):
+        result = {'target':'http://fixture.invalid/', 'started':'2026-01-01',
+                  'status':'partial', 'http_status':None, 'tls':None, 'error':'Incomplete',
+                  'coverage':{}, 'findings':[]}
+        self.assertIn('Assessment incomplete.', html_report(result))
+        result['status'] = 'completed'
+        self.assertIn('does not establish that the target is secure', html_report(result))
+        self.assertIn('No finding-specific actions recorded', html_report(result))
