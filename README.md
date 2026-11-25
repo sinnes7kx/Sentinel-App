@@ -13,6 +13,14 @@ No separate Kali virtual machine is required for the managed Docker toolkit. Pyt
 
 The product name is **Sentinel**. The existing application data directory, project history and runtime identifiers are unchanged.
 
+## Local testing without GitHub Actions
+
+In a complete Windows source checkout, close Sentinel and double-click `Test_Sentinel.bat`. The launcher uses the same private Python environment as Sentinel, compiles the source and runs the local unittest regression suite (including Tk GUI tests). It saves the console results to a timestamped text file in `%LOCALAPPDATA%\Sentinel\test-logs`. Share the failing test names and traceback when reporting a problem; review the log before sharing.
+
+The first run may download the pinned Python dependencies if not already installed. Tests requiring OpenSSL can be skipped if it is missing; the launcher does not claim those checks passed. The full Docker integration lab and other operating system/Python combinations are not run by this launcher.
+
+Cloud testing is now manual-only. Do not start the GitHub Actions Tests workflow unless you intend to consume your available Actions allowance.
+
 ## Windows offline installer (x64)
 
 Run `Sentinel-Windows-x64.exe`, then open **Sentinel** from Start. The installer includes Python/Tk, the dependency and DNS libraries, Microsoft WSL, and a Kali filesystem containing **WhatWeb** and **sslscan**. The four summary cards and three-pane desktop show findings, actions, evidence and project history from your local assessments.
