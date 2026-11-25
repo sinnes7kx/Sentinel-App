@@ -1,11 +1,34 @@
 """One-click website checkup: Sentinel's built-in header/TLS/DNS-free checks plus every installed web tool."""
 from datetime import datetime, timezone
+from ipaddress import ip_address
+import re
 
 from .. import engine
 from ..engine import Scan
 from . import nikto, runner, sslscan, whatweb
 from .base import Profile, ToolMissing, execute, find_binary, parse_scope
 from .scope import require_authorization
+from .backends import Backend
+
+
+def managed_candidate(spec, target, scope, saved):
+    if (saved is None or saved.kind != 'docker' or
+            not re.fullmatch(r'sha256:[0-9a-f]{64}', saved.environment)):
+        return None
+    if spec.id not in ('whatweb', 'sslscan'):
+        return None
+    if spec.id == 'whatweb' and scope.kind != 'ip':
+        return None
+    addresses = scope.addresses if scope.kind == 'host' else (scope.value,)
+    if not addresses:
+        return None
+    for value in addresses:
+        address = ip_address(value)
+        if (address.is_loopback or address.is_link_local or address.is_unspecified or
+                address.is_multicast or address.is_reserved or
+                getattr(address, 'ipv4_mapped', None) is not None):
+            return None
+    return saved
 
 STEPS = ((whatweb.SPEC, 'passive'), (sslscan.SPEC, 'standard'), (nikto.SPEC, 'safe'))
 ORDER = {'high': 0, 'medium': 1, 'low': 2, 'info': 3}
@@ -27,7 +50,7 @@ class Suite:
         return True
 
     def scan(self, value, profile='standard', attested=False, confirm='', cancel=None, resolver=None,
-             run=runner.run, lookup=find_binary, web_scan=engine.scan):
+             run=runner.run, lookup=find_binary, web_scan=engine.scan, managed=None):
         if attested is not True:
             raise PermissionError('Confirm ownership or written permission before testing.')
         if profile not in self.profiles:
@@ -53,10 +76,21 @@ class Suite:
             if spec.schemes == ('https',) and target.scheme != 'https':
                 coverage[spec.id] = 'skipped (needs https://)'; continue
             binary = lookup(spec)
-            if not binary:
-                coverage[spec.id] = 'not installed'; status = 'partial'; errors.append(spec.name + ' is not installed.'); continue
+            selected = Backend() if binary else managed_candidate(spec, target, scope, managed)
+            if selected is None:
+                coverage[spec.id] = 'not installed'; status = 'partial'
+                if spec.id == 'nikto':
+                    errors.append('Nikto is not installed natively; automatic Nikto setup is not available yet.')
+                elif managed is not None:
+                    errors.append(spec.name + ': saved toolkit cannot be used for this target; use a supported native check.')
+                else:
+                    errors.append(spec.name + ': no native executable or approved managed toolkit. Open Tool setup and prepare/test the toolkit.')
+                continue
+            coverage[spec.id + '_engine'] = selected.kind
             try:
-                r = execute(spec, target.url, prof, True, confirm, cancel, resolver=resolver, run=run, binary=binary)
+                # Reuse the already authorized DNS snapshot for numeric TLS targeting.
+                frozen = (lambda host: scope.addresses) if scope.kind == 'host' else resolver
+                r = execute(spec, target.url, prof, True, confirm, cancel, resolver=frozen if selected.kind == 'docker' else resolver, run=run, binary=binary, backend=selected)
             except (ValueError, ToolMissing) as e:
                 coverage[spec.id] = 'not run'; status = 'partial'; errors.append(str(e)); continue
             coverage[spec.id] = r.status
