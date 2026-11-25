@@ -5,7 +5,7 @@ from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from sentinel.tool_setup import install_package, setup
+from sentinel.tool_setup import install_package, setup, saved_source_backend
 from sentinel.tools.runner import RunResult
 
 
@@ -54,7 +54,8 @@ class AutomaticSetupTests(unittest.TestCase):
                 output = 'linux' if argv[3] == 'version' else 'sha256:' + 'a' * 64 if argv[3] == 'image' else ''
                 return RunResult(0, output, '')
             result = setup('toolkit', Event(), platform='nt', find_docker=lambda: 'docker',
-                           invoke=invoke, install=Mock(), payload=path / 'missing', dockerfile=recipe)
+                           invoke=invoke, install=Mock(), payload=path / 'missing', dockerfile=recipe,
+                           preference=lambda _: None)
             self.assertEqual(result['status'], 'completed')
             self.assertEqual(result['environment'], 'sha256:' + 'a' * 64)
             self.assertEqual([cmd[3] for cmd in calls], ['version', 'build', 'image'])
@@ -73,3 +74,55 @@ class AutomaticSetupTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             install_package('docker', which=lambda name: 'winget.exe',
                             launch=Mock(return_value=SimpleNamespace(returncode=1)))
+
+    def test_all_setup_stops_on_missing_nmap(self):
+        install = Mock()
+        invoke = Mock()
+        result = setup('all', Event(), platform='nt', install=install, invoke=invoke,
+                       find_nmap=lambda: False)
+        self.assertEqual(result['status'], 'partial')
+        self.assertIn('nmap:', result['message'])
+        install.assert_called_once_with('nmap')
+        invoke.assert_not_called()
+
+    def test_all_setup_reuses_saved_image_without_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            recipe = path / 'Dockerfile'
+            recipe.write_text('FROM synthetic-fixture')
+            prefs = path / 'saved.json'
+            image = 'sha256:' + 'b' * 64
+            import json
+            prefs.write_text(json.dumps({'kind': 'docker', 'environment': image}))
+            calls = []
+            def invoke(argv, timeout, cancel):
+                calls.append(argv)
+                return RunResult(0, 'linux' if argv[3] == 'version' else image, '')
+            install = Mock()
+            result = setup('all', Event(), platform='nt', install=install, invoke=invoke,
+                           find_nmap=lambda: True, find_docker=lambda: 'docker',
+                           payload=path / 'missing', dockerfile=recipe,
+                           preference=lambda _: prefs)
+            self.assertEqual(result['status'], 'completed')
+            self.assertEqual(result['environment'], image)
+            self.assertIn('nmap:', result['message'])
+            self.assertIn('toolkit:', result['message'])
+            self.assertEqual([cmd[3] for cmd in calls], ['version', 'image'])
+            install.assert_not_called()
+            prefs.write_text(json.dumps({'kind': 'docker', 'environment': 'latest'}))
+            self.assertIsNone(saved_source_backend(prefs))
+
+    def test_built_source_toolkit_is_saved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            recipe = path / 'Dockerfile'
+            recipe.write_text('FROM synthetic-fixture')
+            prefs = path / 'saved.json'
+            image = 'sha256:' + 'c' * 64
+            def invoke(argv, timeout, cancel):
+                return RunResult(0, 'linux' if argv[3] == 'version' else image if argv[3] == 'image' else '', '')
+            result = setup('toolkit', Event(), platform='nt', invoke=invoke,
+                           find_docker=lambda: 'docker', payload=path / 'missing',
+                           dockerfile=recipe, preference=lambda _: prefs)
+            self.assertEqual(result['status'], 'completed')
+            self.assertEqual(saved_source_backend(prefs).environment, image)
