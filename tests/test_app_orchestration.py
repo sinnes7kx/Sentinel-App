@@ -50,7 +50,7 @@ class ApplicationTests(unittest.TestCase):
                     app.nav_buttons['Findings'].invoke()
                     self.assertEqual(app.workspace_tabs.select(), str(app.findings_page))
                     self.assertIn('New assessment', app.nav_buttons)
-                    tools = ToolsWindow(app); tools.withdraw()
+                    tools = app.open_network(); tools.withdraw()
                     self.assertIs(tools.orchestrator, app.orchestrator)
                     self.assertEqual(tools.tabs.select(), str(tools.setup_page))
                     tools.tabs.select(tools.results_page)
@@ -93,6 +93,29 @@ class ApplicationTests(unittest.TestCase):
                     self.assertFalse(tools.auth.get())
                     self.assertIn('not verified', tools.wsl_status.get())
                     self.assertFalse(tools.busy)
+                    tools.auth.set(True)
+                    tools.tool_changed()
+                    self.assertTrue(tools.auth.get(), 'Re-selecting same check retains permission')
+                    tools.close()
+                    self.assertIs(app.open_network(), tools)
+                    self.assertTrue(tools.auth.get(), 'Reopening unchanged session retains permission')
+                    tools.target.set('http://127.0.0.2/')
+                    self.assertFalse(tools.auth.get())
+                    tools.backend.set('wsl')
+                    tools.environment.set('kali-linux')
+                    tools.auth.set(True)
+                    with patch('sentinel.tools_window.messagebox.askokcancel', return_value=True), \
+                         patch('sentinel.tools_window.wsl.available_tools', return_value=['timeout']):
+                        tools.start()
+                        deadline = time.monotonic() + 5
+                        while tools.busy and time.monotonic() < deadline:
+                            app.update(); time.sleep(.01)
+                    self.assertFalse(tools.busy)
+                    self.assertIn('Missing in selected WSL distribution', tools.status.get())
+                    self.assertEqual(tools.tabs.select(), str(tools.setup_page))
+                    self.assertEqual(app.store.history(app.store.project(app.project.get())), [])
+                    self.assertTrue(tools.auth.get())
+                    self.assertTrue(tools.bind('<Escape>'))
                     timer = tools.poll_timer
                     tools.destroy()
                     self.assertNotIn(timer, app.tk.call('after', 'info'))

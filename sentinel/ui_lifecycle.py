@@ -43,3 +43,12 @@ def watch_authorized_scope(window, variables, authorization):
             authorization.set(False)
 
     watch_variables(window, variables, changed)
+
+
+def bind_escape(window, close=None):
+    """Escape uses the same close action as the window manager."""
+    action = close or window.destroy
+    def escape(_event):
+        action()
+        return 'break'
+    window.bind('<Escape>', escape, add='+')

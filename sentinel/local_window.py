@@ -7,7 +7,7 @@ from tkinter import filedialog, ttk
 from .desktop_theme import CANVAS, detail_box, scrollable
 from .local_tools import inspect_integrity, review_report
 from .orchestration import for_app
-from .ui_lifecycle import watch_poll, watch_variables
+from .ui_lifecycle import watch_poll, watch_variables, bind_escape
 
 REPORT_FORMATS = {
     'ZAP · Traditional JSON': ('zap', '*.json'),
@@ -21,6 +21,7 @@ class LocalUtilitiesWindow(tk.Toplevel):
     def __init__(self, app, **options):
         super().__init__(app, **options)
         watch_poll(self)
+        bind_escape(self)
         self.title('Sentinel | Local utilities')
         self.geometry('760x510')
         self.minsize(580, 420)

@@ -229,7 +229,13 @@ class App(tk.Tk):
 
     def open_network(self):
         from .tools_window import ToolsWindow
-        ToolsWindow(self)
+        window = self.children.get('security_tools')
+        if window is None:
+            window = ToolsWindow(self, name='security_tools')
+        else:
+            window.deiconify()
+            window.lift()
+        return window
     def open_dependencies(self):
         from .dependency_window import DependencyWindow
         DependencyWindow(self)
