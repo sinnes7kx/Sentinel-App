@@ -2,7 +2,7 @@
 from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
 from .finding_views import finding_views, finding_detail
 import tkinter as tk
-from .desktop_theme import CANVAS, SEVERITY_COLORS, detail_box, scrollable
+from .desktop_theme import CANVAS, PANEL, SEVERITY_COLORS, detail_box, scrollable
 from tkinter import ttk, messagebox
 from threading import Event
 from .orchestration import for_app
@@ -54,10 +54,20 @@ class ToolsWindow(tk.Toplevel):
                   style='Canvas.TLabel').pack(anchor='w', pady=(2, 10))
         self.tabs = ttk.Notebook(shell)
         self.tabs.pack(fill='both', expand=True)
-        body = self.setup_page = ttk.Frame(self.tabs, padding=12)
+        self.setup_page = ttk.Frame(self.tabs)
         results = self.results_page = ttk.Frame(self.tabs, padding=12)
-        self.tabs.add(body, text='1. Configure assessment')
+        self.tabs.add(self.setup_page, text='1. Configure assessment')
         self.tabs.add(results, text='2. Findings & evidence')
+        # Keep authorization and setup controls reachable on smaller displays.
+        canvas = tk.Canvas(self.setup_page, background=PANEL, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.setup_page, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+        body = ttk.Frame(canvas, padding=12)
+        body_id = canvas.create_window((0, 0), window=body, anchor='nw')
+        body.bind('<Configure>', lambda event: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda event: canvas.itemconfigure(body_id, width=event.width))
         ttk.Label(body, text='Choose a security check', style='Title.TLabel').pack(anchor='w')
         box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly')
         box.pack(fill='x', pady=(4, 2))
@@ -85,6 +95,9 @@ class ToolsWindow(tk.Toplevel):
         self.detect_wsl_button.pack(side='left')
         self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
+        self.saved_toolkit_button = ttk.Button(body, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
+        if self.bundled:
+            self.saved_toolkit_button.pack(anchor='w', pady=(2, 4))
         self.preparation_status = ttk.Label(body, textvariable=self.wsl_status, style='Muted.TLabel',
                                             wraplength=745)
         self.preparation_status.pack(anchor='w')
@@ -142,6 +155,8 @@ class ToolsWindow(tk.Toplevel):
             'wsl': 'Kali or another installed WSL distribution. Guest cancellation is limited.',
             'docker': 'Linux container using a local immutable image. Docker must already be running.',
         }[kind])
+        self.saved_toolkit_button.state(['disabled'] if self.busy or self.wsl_busy or
+                                         self.tool.id not in bundle.BUNDLED_TOOLS else ['!disabled'])
         self.environment_label.configure(text={'native': '', 'wsl': 'Distribution', 'docker': 'Image ID or digest'}[kind])
         self.environment_box.configure(values=self.wsl_names if kind == 'wsl' else (),
                                        state='disabled' if self.wsl_busy else 'normal')
@@ -177,6 +192,19 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_status.set('')
         self.update_tool_info()
         self.update_backend_controls()
+
+    def use_saved_toolkit(self):
+        if self.busy or self.wsl_busy or not self.bundled or self.tool.id not in bundle.BUNDLED_TOOLS:
+            return
+        saved = bundle.saved_backend()
+        try:
+            saved.validate(self.tool.id)
+        except ValueError:
+            self.wsl_status.set('No saved toolkit yet. Choose WSL or Docker, then Prepare included tools.')
+            return
+        self.backend.set(saved.kind)
+        self.environment.set(saved.environment)
+        self.wsl_status.set('Saved toolkit selected. Current runtime and scan connectivity are not verified.')
 
     def prepare_bundle(self):
         kind = self.backend.get()
@@ -266,7 +294,7 @@ class ToolsWindow(tk.Toplevel):
     def tool_changed(self, _=None):
         old = self.tool.kind; self.tool = next(t for t in TOOLS if t.name == self.tool_name.get())
         if self.tool.kind != old and self.target.get() in DEFAULTS.values(): self.target.set(DEFAULTS[self.tool.kind])
-        self.auth.set(False); self.refresh_tool()
+        self.auth.set(False); self.refresh_tool(); self.update_backend_controls()
 
     def update_tool_info(self):
         t = self.tool
@@ -308,6 +336,8 @@ class ToolsWindow(tk.Toplevel):
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
         self.update_backend_controls()
         self.tabs.select(self.results_page)
+        self.result = None
+        self.presented_findings = {}
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
