@@ -1,6 +1,18 @@
 # Sentinel v0.5 development — assessment architecture
 
-## Start Sentinel
+## Windows offline installer (x64)
+
+Run `Sentinel-Windows-x64.exe`, then open **Sentinel** from Start. The installer includes Python/Tk, the dependency and DNS libraries, Microsoft WSL, and a Kali filesystem containing **WhatWeb** and **sslscan**. The four summary cards and three-pane desktop show findings, actions, evidence and project history from your local assessments.
+
+Open **Security tools**, choose **wsl** or **docker**, then **Prepare included tools**. Setup checks the local archive, registers it and remembers the verified environment. Choose WhatWeb for an authorized IP URL or sslscan for a TLS endpoint. Choose a profile, confirm scope and select **Start**.
+
+- **WSL 2** is the bundled path for x64 Windows 11 with hardware virtualization enabled. Initial setup can request Windows administrator approval for Virtual Machine Platform and the signed Microsoft WSL installer. If Windows requests a reboot, restart and select **Prepare included tools** again.
+- **Docker** uses a running Linux-container engine on the same computer. Sentinel imports the included archive and runs its immutable local image ID. The Windows installer includes WSL for computers without a Docker engine.
+- **Tool coverage** includes WhatWeb technology identification and sslscan protocol, cipher and certificate inspection. Nmap and Nikto remain separate integrations. Use an endpoint reachable from the selected runtime. Loopback in a container refers to that container.
+- **Storage** is per user. The app lives under `%LOCALAPPDATA%\Programs\Sentinel`. Windows Settings can uninstall the desktop files. Assessment history and prepared WSL distributions or Docker images persist separately. The environment name or image ID appears in Security tools.
+- **Build** on x64 Linux with Python 3.12+, Docker and NSIS 3.11+: `python3 packaging/windows/build.py dist/Sentinel-Windows-x64.exe`. Network access is used on the build machine. The Kali base is digest-pinned and apt verifies the rolling package index. The resulting installer includes the installed Debian package versions and archive checksum.
+
+## Start Sentinel from source
 
 On Windows, double-click `Start_Sentinel.bat` to open the desktop app. The command-line equivalent is `py -3 run.py`. The app needs Python 3.10 or later with Tcl/Tk. If Tcl/Tk cannot start, the default launcher opens the local browser dashboard. Use `--desktop` to require the desktop, or `--web` to choose the browser directly.
 
@@ -38,9 +50,9 @@ Run `py -3 run.py --desktop` on Windows or `python3 run.py --desktop` on Kali to
 
 The Tkinter interface now shares one bounded background worker across website, external-tool and local dependency checks. Stop/cancel, timestamped progress events, redacted evidence, source/confidence fields and SQLite history are shared. Existing projects and adapters remain available.
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution model, scope boundaries, backend setup and verification limits. Native Windows is the default. Optional WSL/Docker modes in **Security tools** require an installed environment and supported tool; no automatic installs or image downloads occur. WSL cancellation is experimental and may leave Linux work running until the profile timeout. Docker images must be locally available and digest-pinned.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution model, scope boundaries, backend setup and verification limits. Source checkouts default to the native backend. The offline installer opens Security tools with the bundled WSL option. Custom WSL/Docker environments must already contain the selected tool. WSL cancellation is experimental and may leave Linux work running until the profile timeout. Docker images must be locally available and selected by immutable ID or registry digest.
 
-### Use Kali tools from Windows
+### Connect a separately managed Kali distribution
 
 1. If Kali is missing, install it with `wsl --install --distribution kali-linux` from an administrator PowerShell. Restart Windows if prompted and finish the Kali user setup on first launch. [Kali WSL installation](https://www.kali.org/docs/wsl/wsl-preparations/)
 2. In Sentinel, open **Security tools**, set **Run using** to **wsl**, and click **Detect distributions**. Sentinel prefers `kali-linux` when no listed distribution is already selected. You can also enter the exact name of a custom distribution.
@@ -48,11 +60,11 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution mod
 
 The binaries run inside Kali under the distribution's configured user. Package installation is handled within Kali. Use an authorized address reachable from the distribution. A loopback address in Kali may refer to a different machine context from Windows loopback.
 
-CI requires the GUI tests on Windows and Linux. Earlier version-specific test counts below are historical. Live WSL/Docker execution and older 16 GB hardware performance remain unverified.
+CI requires the GUI tests on Windows and Linux. Earlier version-specific test counts below are historical. The bundled tools completed local fixture checks in Linux Docker. Native Windows WSL and Docker Desktop setup and older 16 GB hardware performance remain unverified.
 
 Sentinel is a local-first security assessment prototype for Windows, with a modular Python engine. Its long-term goal is a professional authorized penetration testing platform. This release is a working **configuration assessment**, not a complete penetration test, security certification, or production-ready security platform.
 
-## Start the desktop app on Windows
+## Start the desktop app on Windows from source
 
 1. Install Python 3.10 or later from https://www.python.org/downloads/windows/ (include Tcl/Tk and the Python launcher, which are normally included).
 2. Extract the entire ZIP into a normal writable folder.

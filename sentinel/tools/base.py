@@ -125,6 +125,14 @@ def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=
     with tempfile.TemporaryDirectory(prefix='sentinel-') as tmp:
         outfile = os.path.join(tmp, 'sentinel-out' + spec.outfile) if spec.outfile else ''
         argv = spec.build(binary, target, profile, outfile)
+        # Docker Desktop can stream these reports without sharing a Windows drive.
+        if backend.kind == 'docker' and spec.id in ('sslscan', 'whatweb'):
+            if spec.id == 'sslscan':
+                argv[argv.index('--xml=' + outfile)] = '--xml=-'
+            else:
+                argv[argv.index('--log-json=' + outfile)] = '--log-json=/dev/stdout'
+                argv.insert(1, '--quiet')
+            outfile = ''
         r = backend.run(argv, prof.timeout, cancel, tmp, invoke=run)
         if r.cancelled:
             return result('cancelled', error='Scan cancelled; results are incomplete.')

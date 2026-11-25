@@ -81,6 +81,12 @@ class ApplicationTests(unittest.TestCase):
                     self.assertEqual(app.assessment_count.get(), '1')
                     self.assertEqual(app.observation_count.get(), str(len(records[0][1]['findings'])))
 
+                    self.assertEqual(app.highest.get(), 'Medium')
+                    self.assertFalse(app.result_buttons[0].instate(['disabled']))
+                    self.assertEqual(float(app.progress['value']), 100)
+                    app.findings.selection_set(app.findings.get_children()[0])
+                    app.finding_selected()
+                    self.assertEqual(app.selection_title.get(), records[0][1]['findings'][0]['title'])
                     utilities = app.open_local_utilities()
                     utilities.withdraw()
                     self.assertIs(utilities.orchestrator, app.orchestrator)
