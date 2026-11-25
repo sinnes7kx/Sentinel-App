@@ -9,6 +9,7 @@ from .tool_setup import setup
 from .tool_inventory import snapshot
 from .desktop_theme import scrollable
 from .setup_recovery import recovery
+from .tool_selfcheck import check_installation
 
 
 class ToolSetupWindow(tk.Toplevel):
@@ -52,9 +53,11 @@ class ToolSetupWindow(tk.Toplevel):
         controls.pack(fill='x')
         self.refresh_button = ttk.Button(controls, text='Refresh status', command=self.refresh)
         self.refresh_button.pack(side='left')
+        self.test_button = ttk.Button(controls, text='Test installation', command=self.test_installation)
+        self.test_button.pack(side='left', padx=6)
         self.selected_button = ttk.Button(controls, text='Prepare selected', command=self.prepare_selected, state='disabled')
         self.selected_button.pack(side='left', padx=6)
-        self.cancel_button = ttk.Button(controls, text='Cancel status check', command=self.cancel_refresh, state='disabled')
+        self.cancel_button = ttk.Button(controls, text='Cancel check', command=self.cancel_refresh, state='disabled')
         self.cancel_button.pack(side='left')
         ttk.Separator(body).pack(fill='x', pady=10)
         ttk.Label(body, text='Sentinel detects existing components and downloads missing ones. No VirtualBox or separate Kali installation is required.',
@@ -114,15 +117,30 @@ class ToolSetupWindow(tk.Toplevel):
         self.set_busy(True)
         self.status.set('Checking local metadata and Docker daemon. No downloads or scans.')
 
+    def test_installation(self):
+        if self.busy:
+            return
+        self.cancel = Event()
+        cancel, queue = self.cancel, self.queue
+        try:
+            self.orchestrator.submit(lambda: check_installation(cancel),
+                                     lambda result, error: queue.put((result, error)), cancel)
+        except RuntimeError as exc:
+            self.status.set(str(exc))
+            return
+        self.mode = 'selfcheck'
+        self.set_busy(True)
+        self.status.set('Testing the saved Docker toolkit offline. No target is contacted.')
+
     def cancel_refresh(self):
-        if self.busy and self.mode == 'inventory':
+        if self.busy and self.mode in ('inventory', 'selfcheck'):
             self.cancel.set()
 
     def set_busy(self, busy):
         self.busy = busy
-        for widget in [self.button, self.refresh_button, *self.options]:
+        for widget in [self.button, self.refresh_button, self.test_button, *self.options]:
             widget.state(['disabled'] if busy else ['!disabled'])
-        self.cancel_button.configure(state='normal' if busy and self.mode == 'inventory' else 'disabled')
+        self.cancel_button.configure(state='normal' if busy and self.mode in ('inventory', 'selfcheck') else 'disabled')
         self.retry_button.state(['!disabled'] if not busy and self.last_retry_allowed else ['disabled'])
         self.selected()
 
@@ -179,6 +197,14 @@ class ToolSetupWindow(tk.Toplevel):
                     self.status.set('Local status refreshed. No assessment was performed.')
                 else:
                     self.status.set(error or 'Status check cancelled or incomplete. Previous inventory may be stale.')
+            elif mode == 'selfcheck':
+                if result and result.get('rows'):
+                    self.rows = [row for row in self.rows if row['name'] not in ('whatweb', 'sslscan')] + result['rows']
+                    self.tree.delete(*self.tree.get_children())
+                    for i, row in enumerate(self.rows):
+                        self.tree.insert('', 'end', iid=str(i), values=(row['name'], row['state']))
+                    self.selected()
+                self.status.set(error or (result or {}).get('message', 'Installation test could not finish.'))
             else:
                 outcome = result or {'status': 'failed'}
                 self.status.set(error or outcome.get('error') or outcome.get('message', 'Setup could not finish.'))
