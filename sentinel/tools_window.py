@@ -1,5 +1,5 @@
 """Beginner window for every integrated security tool."""
-from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
+from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope, bind_escape
 from .finding_views import finding_views, finding_detail
 import tkinter as tk
 from .desktop_theme import CANVAS, PANEL, SEVERITY_COLORS, detail_box, scrollable
@@ -20,8 +20,9 @@ LABELS = {'net': 'Target: an IP address, a host name, or a home/office network s
 
 
 class ToolsWindow(tk.Toplevel):
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, app, **options):
+        super().__init__(app, **options)
+        bind_escape(self, self.close)
         watch_poll(self)
         self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
@@ -292,7 +293,10 @@ class ToolsWindow(tk.Toplevel):
         self.detail.configure(state='normal'); self.detail.delete('1.0', 'end'); self.detail.insert('1.0', text); self.detail.configure(state='disabled')
 
     def tool_changed(self, _=None):
-        old = self.tool.kind; self.tool = next(t for t in TOOLS if t.name == self.tool_name.get())
+        chosen = next(t for t in TOOLS if t.name == self.tool_name.get())
+        if chosen.id == self.tool.id:
+            return
+        old = self.tool.kind; self.tool = chosen
         if self.tool.kind != old and self.target.get() in DEFAULTS.values(): self.target.set(DEFAULTS[self.tool.kind])
         self.auth.set(False); self.refresh_tool(); self.update_backend_controls()
 
@@ -300,13 +304,13 @@ class ToolsWindow(tk.Toplevel):
         t = self.tool
         kind = self.backend.get()
         if kind == 'native':
-            availability = '' if t.installed() else '\nTool is missing locally. Press Start for installation details.'
+            availability = '' if t.installed() else '\nTool is not installed in Windows. Press Start for installation instructions, or choose a prepared Linux engine.'
         elif self.bundled and not self.environment.get().strip():
             availability = '\nChoose Prepare included tools for WhatWeb and sslscan. WSL setup may request administrator access and a restart.'
         elif t.id not in SUPPORTED:
             availability = '\nSelect Nmap, sslscan, or WhatWeb to use this backend.'
         else:
-            availability = '\nUses the executable installed in the selected environment.'
+            availability = '\nUses the executable installed in the selected environment. WSL availability is checked before each assessment.'
         self.info.set(t.blurb + availability + (('\n' + t.note) if t.note else ''))
 
     def refresh_tool(self):
@@ -341,9 +345,25 @@ class ToolsWindow(tk.Toplevel):
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
+        def operation():
+            if backend.kind == 'wsl':
+                try:
+                    installed = wsl.available_tools(backend.environment, ev)
+                except ValueError as exc:
+                    return {'status': 'failed', 'setup_error': str(exc)}
+                if ev.is_set():
+                    return {'status': 'cancelled', 'setup_error': 'Cancelled during engine check.'}
+                missing = [name for name in ('timeout', tool.id) if name not in installed]
+                if missing:
+                    return {'status': 'failed', 'setup_error':
+                            'Missing in selected WSL distribution: ' + ', '.join(missing) +
+                            '. Open that Linux terminal and install the required packages. ' +
+                            ('For Nmap: sudo apt update && sudo apt install nmap.' if tool.id == 'nmap'
+                             else 'For Kali/Debian, use the package manager or Prepare included tools.')}
+            return tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict()
         try:
             self.job = self.orchestrator.submit(
-                lambda: tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict(),
+                operation,
                 lambda result, error: queue.put((pid, name, result, error)), ev)
             self.status.set('Queued; one check runs at a time.')
         except RuntimeError as exc:
@@ -361,6 +381,11 @@ class ToolsWindow(tk.Toplevel):
             self.busy = False; self.bar.stop(); self.run_btn.configure(state='normal'); self.stop_btn.configure(state='disabled')
             self.update_backend_controls()
             if err: self.status.set('Error: ' + err); self.say('The check could not run. ' + err)
+            elif res.get('setup_error'):
+                self.status.set(res['setup_error'])
+                self.say(res['setup_error'])
+                self.tabs.select(self.setup_page)
+                self.wsl_status.set(res['setup_error'])
             else:
                 self.result = res; sid = self.app.store.save(pid, res)
                 views = finding_views(res)
@@ -383,5 +408,11 @@ class ToolsWindow(tk.Toplevel):
             self.say(finding_detail(self.presented_findings[s[0]]))
 
     def close(self):
-        if self.busy and not messagebox.askyesno('Exit', 'A check is running. Stop it and close?', parent=self): return
-        self.cancel_event.set(); self.destroy()
+        if self.busy or self.wsl_busy:
+            if not messagebox.askyesno('Exit', 'An operation is running. Request cancellation and close the window?', parent=self):
+                return
+            self.cancel_event.set()
+            self.wsl_cancel.set()
+            # Keep the worker callbacks alive until they finish. A hidden
+            # window retains its exact scope and can be reopened to inspect it.
+        self.withdraw()
