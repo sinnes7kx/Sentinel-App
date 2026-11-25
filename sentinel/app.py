@@ -76,7 +76,7 @@ class App(tk.Tk):
             ('Security tools', self.open_network, 'Nav.TButton'),
             ('Dependencies', self.open_dependencies, 'Nav.TButton'),
             ('CVE review', self.open_cve_review, 'Nav.TButton'),
-            ('Access control lab', self.open_access_lab, 'Nav.TButton'),
+            ('Verification lab', self.open_access_lab, 'Nav.TButton'),
             ('Local utilities', self.open_local_utilities, 'Nav.TButton'),
         ):
             button = ttk.Button(self.navigation, text=label, command=command, style=style)
