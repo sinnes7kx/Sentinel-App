@@ -1,5 +1,5 @@
 """Beginner window for every integrated security tool."""
-from .ui_lifecycle import watch_poll, watch_variables
+from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
 from .finding_views import finding_views, finding_detail
 import tkinter as tk
 from .desktop_theme import CANVAS, detail_box
@@ -71,7 +71,7 @@ class ToolsWindow(tk.Toplevel):
         self.check_wsl_button.pack(side='left', padx=6)
         ttk.Label(self.wsl_controls, textvariable=self.wsl_status, style='Muted.TLabel',
                   wraplength=480).pack(side='left', fill='x')
-        ttk.Checkbutton(body, text='I own this target or have written permission to test it.', variable=self.auth).pack(anchor='w', pady=(4, 2))
+        ttk.Checkbutton(body, text='I have permission for this exact target and check (remembered until scope changes).', variable=self.auth).pack(anchor='w', pady=(4, 2))
         conf = self.confirm_row = ttk.Frame(body); conf.pack(fill='x', pady=(0, 8))
         ttk.Label(conf, text='Only for targets outside your private network — type the host name or IP again to confirm:').pack(side='left')
         ttk.Entry(conf, textvariable=self.confirm, width=26).pack(side='left', padx=8)
@@ -83,8 +83,8 @@ class ToolsWindow(tk.Toplevel):
         self.detail = detail_box(body, height=9)
         self.detail.pack(fill='both', expand=True, pady=(8, 0))
         ttk.Label(self, textvariable=self.status, style='Canvas.TLabel').pack(fill='x', padx=16, pady=(0, 10))
-        watch_variables(self, (self.target, self.profile, self.backend, self.environment),
-                        lambda *_: self.auth.set(False))
+        watch_authorized_scope(self, (self.app.project, self.tool_name, self.target, self.profile,
+                                      self.backend, self.environment), self.auth)
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
         self.update_backend_controls()
@@ -260,7 +260,6 @@ class ToolsWindow(tk.Toplevel):
         self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
-        self.auth.set(False)
         try:
             self.job = self.orchestrator.submit(
                 lambda: tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {})).to_dict(),
