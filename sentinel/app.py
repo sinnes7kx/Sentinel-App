@@ -1,4 +1,5 @@
-from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
+from .ui_lifecycle import watch_poll, watch_variables
+from .scan_confirmation import confirm_website
 from .desktop_theme import SEVERITY_COLORS, configure_theme, detail_box, scrollable
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -47,7 +48,7 @@ class App(tk.Tk):
         self.url = tk.StringVar(value='https://')
         self.dns = tk.StringVar()
         self.assessment_profile = tk.StringVar(value='Quick')
-        self.auth = tk.BooleanVar()
+        self.confirming = False
         self.status = tk.StringVar(value='Ready')
         self.summary = tk.StringVar(value='No assessment selected')
         self.observation_count = tk.StringVar(value='—')
@@ -115,10 +116,6 @@ class App(tk.Tk):
         ttk.Entry(form, textvariable=self.dns).grid(row=3, column=1, sticky='ew', padx=(0, 8))
         ttk.Label(form, text='Standard adds modern TLS checks.', style='Muted.TLabel',
                   wraplength=170).grid(row=3, column=2, columnspan=2, sticky='w')
-        self.auth_check = ttk.Checkbutton(form, text='I have permission for this scope (remembered until settings change).',
-                                          variable=self.auth)
-        self.auth_check.grid(row=4, column=0, columnspan=4, sticky='w', pady=(8, 0))
-        watch_authorized_scope(self, (self.project, self.url, self.dns, self.assessment_profile), self.auth)
 
     def build_overview(self, parent):
         overview = ttk.Frame(parent, style='Canvas.TFrame')
@@ -250,13 +247,19 @@ class App(tk.Tk):
     def set_detail(self,text):
         self.detail.configure(state='normal'); self.detail.delete('1.0','end'); self.detail.insert('1.0',text); self.detail.configure(state='disabled')
     def run(self):
-        if self.busy:return
+        if self.busy or self.confirming:return
         try:
-            if not self.auth.get():raise PermissionError('Confirm explicit permission before testing.')
             profile = self.assessment_profile.get()
             if profile not in ('Quick', 'Standard'): raise ValueError('Unknown assessment profile.')
             operation = standard_scan if profile == 'Standard' else scan
-            target=Target.parse(self.url.get()); dns=domain_name(self.dns.get()) if self.dns.get().strip() else ''; pid=self.store.project(self.project.get()); name=self.project.get().strip()
+            target=Target.parse(self.url.get()); dns=domain_name(self.dns.get()) if self.dns.get().strip() else ''; name=self.project.get().strip()
+            self.confirming = True
+            try:
+                approved = confirm_website(self, target.url, profile, dns)
+            finally:
+                self.confirming = False
+            if not approved: return
+            pid=self.store.project(name)
         except (ValueError,PermissionError) as e:messagebox.showerror('Cannot start',str(e));return
         self.progress.configure(mode='indeterminate')
         self.progress.start(18)
