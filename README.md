@@ -17,7 +17,7 @@ The product name is **Sentinel**. The existing application data directory, proje
 
 In a complete Windows source checkout, close Sentinel and double-click `Test_Sentinel.bat`. The launcher uses the same private Python environment as Sentinel, compiles the source and runs the local unittest regression suite (including Tk GUI tests). It saves the console results to a timestamped text file in `%LOCALAPPDATA%\Sentinel\test-logs`. Share the failing test names and traceback when reporting a problem; review the log before sharing.
 
-The first run may download the pinned Python dependencies if not already installed. Tests requiring OpenSSL can be skipped if it is missing; the launcher does not claim those checks passed. The full Docker integration lab and other operating system/Python combinations are not run by this launcher.
+The first run may download the pinned Python dependencies if not already installed. The test launcher also looks for OpenSSL in an existing standard Git for Windows installation, without changing the system PATH. Tests requiring OpenSSL can be skipped if it is missing; the launcher does not claim those checks passed. The full Docker integration lab and other operating system/Python combinations are not run by this launcher.
 
 Cloud testing is now manual-only. Do not start the GitHub Actions Tests workflow unless you intend to consume your available Actions allowance.
 
