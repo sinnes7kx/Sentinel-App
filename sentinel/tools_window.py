@@ -12,6 +12,7 @@ from .tools.base import ToolMissing, parse_scope
 from .tools.scope import require_authorization
 from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
 from .tools import bundle, wsl
+from .tool_setup import saved_source_backend
 import os
 
 DEFAULTS = {'net': '192.168.1.1', 'web': 'https://'}
@@ -100,7 +101,7 @@ class ToolsWindow(tk.Toplevel):
             ttk.Button(body, text='Install / prepare security tools', command=self.open_tool_setup,
                        style='Primary.TButton').pack(anchor='w', pady=(4, 6))
         self.saved_toolkit_button = ttk.Button(body, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
-        if self.bundled:
+        if self.bundled or os.name == 'nt':
             self.saved_toolkit_button.pack(anchor='w', pady=(2, 4))
         self.preparation_status = ttk.Label(body, textvariable=self.wsl_status, style='Muted.TLabel',
                                             wraplength=745)
@@ -208,9 +209,12 @@ class ToolsWindow(tk.Toplevel):
         return window
 
     def use_saved_toolkit(self):
-        if self.busy or self.wsl_busy or not self.bundled or self.tool.id not in bundle.BUNDLED_TOOLS:
+        if self.busy or self.wsl_busy or self.tool.id not in bundle.BUNDLED_TOOLS:
             return
-        saved = bundle.saved_backend()
+        saved = bundle.saved_backend() if self.bundled else saved_source_backend()
+        if saved is None:
+            self.wsl_status.set('No saved toolkit yet. Choose Install / prepare security tools.')
+            return
         try:
             saved.validate(self.tool.id)
         except ValueError:
