@@ -1,8 +1,6 @@
 name: Tests
 on:
-  push:
-    branches: [main, 'dev/**']
-  pull_request:
+  # Cloud testing is opt-in to preserve the private repository's included allowance.
   workflow_dispatch:
 
 permissions:
