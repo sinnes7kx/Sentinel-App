@@ -12,7 +12,7 @@ import json
 from .evidence import sanitize
 from .finding_views import RISK_ORDER
 
-PROFILES = {'web-v2', 'web-standard-v1'}
+PROFILES = {'web-v2', 'web-standard-v1', 'web-extended-v1'}
 
 
 @dataclass(frozen=True)
@@ -45,11 +45,15 @@ def _reason(previous, current):
     if previous.get('target') != current.get('target'):
         return 'Different target URLs.'
     if previous.get('profile') not in PROFILES or previous.get('profile') != current.get('profile'):
-        return 'Only matching native Quick or Standard profiles are supported.'
+        return 'Only matching native Quick, Standard or Extended profiles are supported.'
     if previous.get('coverage', {}).get('cookie_ruleset') != current.get('coverage', {}).get('cookie_ruleset'):
         return 'Cookie check coverage changed. Run a fresh baseline before comparing results.'
     if previous.get('coverage', {}).get('header_ruleset') != current.get('coverage', {}).get('header_ruleset'):
         return 'Browser header check coverage changed. Run a fresh baseline before comparing results.'
+    if previous.get('profile') == 'web-extended-v1' and any(
+            r.get('coverage', {}).get('cors_review', {}).get('status') != 'completed'
+            for r in (previous, current)):
+        return 'Complete cross-origin review coverage is required.'
     if previous.get('dns_domain') or current.get('dns_domain'):
         return 'Optional DNS assessments require a separate evidence review.'
     if any(r.get('status') != 'completed' for r in (previous, current)):

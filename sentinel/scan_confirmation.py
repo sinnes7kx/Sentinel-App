@@ -10,6 +10,8 @@ def confirm_website(parent, target, profile, dns):
     detail = 'Target: ' + target + '\nAssessment: ' + profile
     if dns:
         detail += '\nDNS domain: ' + dns
+    if profile == 'Extended':
+        detail += '\nIncludes up to two additional anonymous requests to the same URL and modern TLS checks.'
     return messagebox.askokcancel('Confirm assessment', detail +
         '\n\nStart this assessment? By continuing, you confirm authorization for the displayed scope.',
         parent=parent, default=messagebox.CANCEL)
