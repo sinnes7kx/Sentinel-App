@@ -40,6 +40,10 @@ class InventoryTests(unittest.TestCase):
                          preference=lambda: Backend('docker', IMAGE))
         self.assertEqual(rows['Docker runtime']['state'], 'Responding')
         self.assertEqual(rows['Managed Kali toolkit']['state'], 'Detected')
+        for name in ('WhatWeb (native)', 'sslscan (native)'):
+            self.assertEqual(rows[name]['state'], 'Docker alternative')
+            self.assertIn('scan connectivity is not verified', rows[name]['detail'])
+        self.assertEqual(rows['Nikto (native)']['state'], 'Not detected')
         self.assertEqual(rows['OWASP ZAP']['state'], 'Detected')
         self.assertIn('not enabled', rows['OWASP ZAP']['detail'])
         self.assertEqual([cmd[3] for cmd in commands], ['version', 'image', 'image'])
@@ -51,6 +55,8 @@ class InventoryTests(unittest.TestCase):
                          preference=lambda: Backend('docker', IMAGE))
         self.assertEqual(rows['Docker runtime']['state'], 'Needs attention')
         self.assertEqual(rows['Managed Kali toolkit']['state'], 'Unverified')
+        self.assertEqual(rows['WhatWeb (native)']['state'], 'Not detected')
+        self.assertIn('cannot be confirmed', rows['WhatWeb (native)']['detail'])
         self.assertEqual(rows['OWASP ZAP']['state'], 'Unverified')
         invoke.assert_called_once()
 
