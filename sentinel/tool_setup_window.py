@@ -198,12 +198,13 @@ class ToolSetupWindow(tk.Toplevel):
                 else:
                     self.status.set(error or 'Status check cancelled or incomplete. Previous inventory may be stale.')
             elif mode == 'selfcheck':
-                if result and result.get('rows'):
-                    self.rows = [row for row in self.rows if row['name'] not in ('whatweb', 'sslscan')] + result['rows']
-                    self.tree.delete(*self.tree.get_children())
-                    for i, row in enumerate(self.rows):
-                        self.tree.insert('', 'end', iid=str(i), values=(row['name'], row['state']))
-                    self.selected()
+                self.rows = [row for row in self.rows if row['name'] not in ('whatweb', 'sslscan')]
+                if result and not error:
+                    self.rows.extend(result.get('rows', []))
+                self.tree.delete(*self.tree.get_children())
+                for i, row in enumerate(self.rows):
+                    self.tree.insert('', 'end', iid=str(i), values=(row['name'], row['state']))
+                self.selected()
                 self.status.set(error or (result or {}).get('message', 'Installation test could not finish.'))
             else:
                 outcome = result or {'status': 'failed'}
