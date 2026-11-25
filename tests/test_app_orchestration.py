@@ -43,6 +43,11 @@ class ApplicationTests(unittest.TestCase):
                     app = App()
                 app.withdraw()
                 try:
+                    app.nav_buttons['Project history'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.history_page))
+                    app.nav_buttons['Findings'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.findings_page))
+                    self.assertIn('New assessment', app.nav_buttons)
                     tools = ToolsWindow(app); tools.withdraw()
                     self.assertIs(tools.orchestrator, app.orchestrator)
                     tools.auth.set(True); tools.target.set('127.0.0.1')
@@ -100,6 +105,10 @@ class ApplicationTests(unittest.TestCase):
                     app.findings.selection_set(str(index))
                     app.finding_selected()
                     self.assertEqual(app.remediation_state.get(), 'Investigating')
+                    app.nav_buttons['Project history'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.history_page))
+                    app.nav_buttons['Findings'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.findings_page))
                     self.assertTrue(app.auth.get(), 'Unchanged scope retains explicit permission')
                     app.run()  # No second checkbox interaction.
                     deadline = time.monotonic() + 6
