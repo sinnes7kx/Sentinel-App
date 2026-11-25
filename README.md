@@ -165,3 +165,7 @@ Architecture: `sentinel/tools/base.py` runs every tool the same way (scope check
 ### Website mapper
 
 Open **Website mapper**, enter an authorized HTTP(S) starting page and click **Map website**. See public links and ordinary form input names in a clickable tree. The map is limited to 16 pages and two link levels on the exact same origin and one resolved peer; no query links, redirects, hidden-page guessing, login, form submission or scripts. Only use it where ordinary navigation is read-only. Results stay in the window and are not a vulnerability verdict. Run `Test_Sentinel.bat` after updating.
+
+### Desktop performance
+
+The launcher reuses its private runtime and allows normal Python bytecode caching. Rounded theme images use batched rows and shared tiles. Project history lists lightweight metadata and loads full evidence only when selected; comparisons still access older same-target records. Idle polling and progress animation frequency are reduced. No scan scope, saved evidence, or severity colors have been changed. Actual startup and responsiveness improvements depend on the computer and history size; run `Test_Sentinel.bat` and compare startup and navigation locally.
