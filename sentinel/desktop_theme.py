@@ -2,11 +2,11 @@
 import tkinter as tk
 from tkinter import ttk
 
-CANVAS = '#111416'
-PANEL = '#1b1f22'
-SURFACE = '#15191c'
-RAISED = '#293137'
-LINE = '#394249'
+CANVAS = '#10151d'
+PANEL = '#19212b'
+SURFACE = '#141b24'
+RAISED = '#263445'
+LINE = '#354358'
 INK = '#eef3f5'
 MUTED = '#a9b8c2'
 ACCENT = '#a6ded0'
@@ -40,8 +40,12 @@ def configure_theme(root):
     style.configure('TPanedwindow', background=CANVAS)
     style.configure('Canvas.TFrame', background=CANVAS)
     style.configure('Canvas.TLabel', background=CANVAS, foreground=MUTED)
-    style.configure('Header.TFrame', background='#0e1012')
+    style.configure('Header.TFrame', background='#0d121a')
     style.configure('Brand.TLabel', background='#0e1012', foreground=INK, font=('Segoe UI', 12, 'bold'))
+    style.configure('NavCaption.TLabel', background='#0d121a', foreground=MUTED,
+                    font=('Segoe UI', 9))
+    style.configure('WorkspaceTitle.TLabel', background=CANVAS, foreground=INK,
+                    font=('Segoe UI', 21, 'bold'))
     style.configure('Section.TLabel', foreground=MUTED, font=('Segoe UI', 9, 'bold'))
     style.configure('Scan.Horizontal.TProgressbar', background=ACCENT, troughcolor=RAISED,
                     borderwidth=0, thickness=3, lightcolor=ACCENT, darkcolor=ACCENT)
@@ -53,10 +57,14 @@ def configure_theme(root):
     style.configure('TButton', padding=(10, 6), background=RAISED)
     style.map('TButton', background=[('disabled', SURFACE), ('active', '#36434a')],
               foreground=[('disabled', MUTED)])
+    style.configure('Nav.TButton', background='#0d121a', foreground=INK,
+                    anchor='w', padding=(10, 9), borderwidth=0)
+    style.map('Nav.TButton', background=[('active', RAISED), ('pressed', SURFACE)],
+              foreground=[('disabled', MUTED)])
     style.configure('Primary.TButton', background=ACCENT, foreground='#142624')
     style.map('Primary.TButton', background=[('disabled', RAISED), ('active', '#c1eee2')],
               foreground=[('disabled', MUTED)])
-    style.configure('Treeview', background=SURFACE, fieldbackground=SURFACE, rowheight=27)
+    style.configure('Treeview', background=SURFACE, fieldbackground=SURFACE, rowheight=30)
     style.configure('Treeview.Heading', background=RAISED, foreground=INK, padding=(6, 5))
     style.map('Treeview', background=[('selected', '#35504e')], foreground=[('selected', INK)])
     style.map('Treeview.Heading', background=[('active', RAISED)])
