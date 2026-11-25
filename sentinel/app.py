@@ -11,6 +11,7 @@ from .standard_assessment import standard_scan
 from .store import Store, REMEDIATION_STATES
 from .dnscheck import domain_name
 import json
+import os
 from .report import html_report
 from .finding_views import finding_views, finding_detail, findings_summary
 from .retest_review import review, review_text
@@ -75,6 +76,10 @@ class App(tk.Tk):
             button = ttk.Button(self.navigation, text=label, command=command, style=style)
             button.pack(fill='x', pady=(0, 6))
             self.nav_buttons[label] = button
+        if os.name == 'nt':
+            button = ttk.Button(self.navigation, text='Tool setup', command=self.open_tool_setup, style='Nav.TButton')
+            button.pack(fill='x', pady=(0, 6))
+            self.nav_buttons['Tool setup'] = button
         ttk.Label(self.navigation, text='LOCAL WORKSPACE', style='NavCaption.TLabel').pack(side='bottom', anchor='w')
         workspace = ttk.Frame(shell, padding=(16, 12), style='Canvas.TFrame')
         workspace.pack(side='left', fill='both', expand=True)
@@ -226,6 +231,9 @@ class App(tk.Tk):
             window.deiconify()
             window.lift()
         return window
+
+    def open_tool_setup(self):
+        return self.open_network().open_tool_setup()
 
     def open_network(self):
         from .tools_window import ToolsWindow
