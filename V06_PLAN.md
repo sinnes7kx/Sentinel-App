@@ -20,3 +20,9 @@ Product goal: beginner-friendly on the surface, professional underneath. Windows
 Learning Lab: intentionally vulnerable local fixtures, isolated from unrelated systems. No simulated findings in real assessments. No unattended exploitation or arbitrary tool flags in the beginner flow. Free remains genuinely useful; defer Pro/Business licensing and payment until stable.
 
 Verification: new tests supplied, but this connector-only change has not been run on Windows or in a live Docker/WSL environment. No claim of complete v0.6 or new vulnerability coverage.
+
+## Increment 2 — Engine health checks
+
+The guided window now offers explicit Check engines and Cancel check actions using the shared bounded worker. Docker diagnostics use the standard local named pipe on Windows or Unix socket on Linux, check for a Linux daemon, inspect only the saved local image ID, and run the two bundled tool version commands with no container network, no image pulls, resource limits and best-effort cleanup. WSL diagnostics list distributions and query versions only in the saved distribution with fixed commands and remote deadlines. A WSL distribution can start as a result; WSL is not a network-isolation boundary.
+
+Runtime diagnostics distinguish client detection, daemon response, image presence and reported tool versions from verified assessment compatibility. No raw subprocess diagnostics are shown. Custom Docker sockets and unprepared environments are not supported by these health checks. The checks are informational; they do not select a scan backend or authorize any assessment. Existing Windows process-tree and network egress limitations remain. Added mocked regression tests; native Windows, Docker Desktop and WSL runtime tests remain release gates.
