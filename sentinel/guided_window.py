@@ -14,8 +14,8 @@ class GuidedWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app, name='guided_assessment')
         self.title('Sentinel | New assessment')
-        self.geometry('720x620')
-        self.minsize(580, 520)
+        self.geometry('680x560')
+        self.minsize(600, 500)
         self.app = app
         self.orchestrator = for_app(app)
         self.health_queue = Queue()
@@ -24,7 +24,7 @@ class GuidedWindow(tk.Toplevel):
         watch_poll(self)
         bind_escape(self)
         self.bind('<Destroy>', self.on_destroy, add='+')
-        body = ttk.Frame(self, padding=18)
+        body = ttk.Frame(self, padding=10)
         body.pack(fill='both', expand=True)
         ttk.Label(body, text='What would you like to secure?',
                   style='Title.TLabel').pack(anchor='w', pady=(0, 8))
@@ -41,10 +41,10 @@ class GuidedWindow(tk.Toplevel):
         )
         for label, description, action in choices:
             row = ttk.Frame(body)
-            row.pack(fill='x', pady=4)
+            row.pack(fill='x', pady=2)
             ttk.Button(row, text=label, command=action).pack(anchor='w')
             ttk.Label(row, text=description, wraplength=520).pack(anchor='w')
-        ttk.Separator(body).pack(fill='x', pady=12)
+        ttk.Separator(body).pack(fill='x', pady=5)
         ttk.Label(body, text='Security engine inventory',
                   style='Title.TLabel').pack(anchor='w')
         ttk.Label(body, text='Detection is not readiness. Check engines to test the local runtime and prepared tool versions.',
@@ -154,9 +154,9 @@ class GuidedWindow(tk.Toplevel):
         window = tk.Toplevel(self, name='website_plan')
         bind_escape(window)
         window.title('Sentinel | Review website assessment')
-        window.geometry('680x560')
+        window.geometry('680x500')
         window.minsize(560, 440)
-        panel = ttk.Frame(window, padding=16)
+        panel = ttk.Frame(window, padding=10)
         panel.pack(fill='both', expand=True)
         target = tk.StringVar(value=self.app.url.get())
         profile = tk.StringVar(value='Quick')
@@ -167,7 +167,9 @@ class GuidedWindow(tk.Toplevel):
                         variable=profile, value='Quick').pack(anchor='w')
         ttk.Radiobutton(panel, text='Standard — built-in checks plus modern TLS verification',
                         variable=profile, value='Standard').pack(anchor='w')
-        area = tk.Text(panel, height=14, wrap='word', state='disabled')
+        from .desktop_theme import detail_box
+        area = detail_box(panel, height=10)
+        area.configure(state='disabled')
         area.pack(fill='both', expand=True, pady=8)
         approved_plan = None
 
