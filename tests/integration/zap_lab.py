@@ -11,11 +11,13 @@ import subprocess
 import sys
 import tempfile
 import time
+from threading import Event
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from sentinel.zap_review import parse_report, MAX_BYTES
+from sentinel.zap_setup import prepare_zap
 from sentinel.tools.backends import docker_cleanup
 from sentinel.tools.runner import run
 from lab_boundary import verify_boundary
@@ -42,6 +44,16 @@ def main():
     if os.name != 'posix':
         raise RuntimeError('Use a dedicated Linux CI Docker environment.')
     zap_image, fixture_image = image_id(ZAP_IMAGE), image_id(FIXTURE_IMAGE)
+    # CI has already explicitly pulled the image; test the same offline probe
+    # used by desktop setup without permitting a second pull.
+    def local_only(argv, timeout, cancel):
+        if argv[3] == 'pull':
+            raise AssertionError('ZAP CI image must be prepared before the probe.')
+        return run(argv, timeout, cancel)
+    prepared = prepare_zap(DOCKER, Event(), local_only)
+    if prepared['status'] != 'completed' or prepared.get('zap_image') != zap_image:
+        raise AssertionError('ZAP setup verification failed: ' + prepared['message'])
+    print('PASS: offline ZAP version check and container cleanup:', prepared['zap_version'])
     fixture = 'sentinel-zap-fixture-' + uuid.uuid4().hex
     scanner = 'sentinel-zap-scan-' + uuid.uuid4().hex
     with tempfile.TemporaryDirectory() as tmp:
