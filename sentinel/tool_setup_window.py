@@ -13,7 +13,7 @@ class ToolSetupWindow(tk.Toplevel):
         super().__init__(tools, name='tool_setup')
         self.tools = tools
         self.title('Sentinel | Automatic tool setup')
-        self.geometry('680x500')
+        self.geometry('680x540')
         self.minsize(560, 380)
         self.orchestrator = for_app(tools.app)
         self.queue = Queue()
@@ -30,10 +30,11 @@ class ToolSetupWindow(tk.Toplevel):
         ttk.Label(body, text='Sentinel detects existing components and downloads missing ones. No VirtualBox or separate Kali installation is required.',
                   wraplength=565).pack(anchor='w', pady=(6, 12))
         self.options = []
-        for label, value in (('Recommended — all supported components', 'all'),
+        for label, value in (('Recommended — Nmap and Kali toolkit', 'all'),
                              ('Nmap — native Windows', 'nmap'),
                              ('Docker Desktop — Linux runtime', 'docker'),
-                             ('Kali toolkit — WhatWeb and sslscan via Docker', 'toolkit')):
+                             ('Kali toolkit — WhatWeb and sslscan via Docker', 'toolkit'),
+                             ('ZAP — optional web security engine (larger download)', 'zap')):
             radio = ttk.Radiobutton(body, text=label, value=value, variable=self.choice)
             radio.pack(anchor='w', pady=4)
             self.options.append(radio)
