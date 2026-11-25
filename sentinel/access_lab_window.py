@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk
 from queue import Queue, Empty
 from threading import Event
+from pathlib import Path
+import webbrowser
 
 from .access_lab import demonstrate
 from .database_lab import demonstrate_database
@@ -29,7 +31,7 @@ class AccessLabWindow(tk.Toplevel):
         ttk.Label(body, text='Verify a security failure', style='Title.TLabel').pack(anchor='w')
         self.kind = tk.StringVar(value='Access control')
         self.selector = ttk.Combobox(body, textvariable=self.kind, state='readonly',
-                                     values=('Access control', 'Database input handling'))
+                                     values=('Access control', 'Database input handling', 'XSS (browser practice)'))
         self.selector.pack(anchor='w', fill='x', pady=(4, 4))
         self.description = tk.StringVar(value='')
         ttk.Label(body, textvariable=self.description, wraplength=610,
@@ -65,7 +67,11 @@ class AccessLabWindow(tk.Toplevel):
             return
         self.tree.delete(*self.tree.get_children())
         self.status.set('Local practice only. No external target is contacted.')
-        if self.kind.get() == 'Database input handling':
+        self.start_button.configure(text='Open browser example' if self.kind.get() == 'XSS (browser practice)' else 'Run live lab')
+        if self.kind.get() == 'XSS (browser practice)':
+            self.description.set('See why a website should display comments as words instead of running them as instructions.')
+            self.say('Click Open browser example. Two isolated frames compare a fixed harmless script with the same text displayed safely. Look for the message that changes. No real site is tested, and Sentinel does not automatically record browser execution.')
+        elif self.kind.get() == 'Database input handling':
             self.description.set('Run real SQLite queries against two synthetic records in memory. Compare unsafe SQL construction with bound parameters.')
             self.say('WHY THIS MATTERS\nUser input should remain data, not become part of a database instruction. This experiment tests a normal record ID and a fixed unexpected expression.')
         else:
@@ -80,6 +86,15 @@ class AccessLabWindow(tk.Toplevel):
 
     def start(self):
         if self.busy:
+            return
+        if self.kind.get() == 'XSS (browser practice)':
+            page = Path(__file__).with_name('xss_practice.html')
+            try:
+                opened = page.is_file() and webbrowser.open(page.resolve().as_uri())
+            except (OSError, webbrowser.Error):
+                opened = False
+            self.status.set('Observe the two browser examples. No automatic result recorded.' if opened else
+                            'Browser example could not open. Check your default browser and source files.')
             return
         self.cancel = Event()
         cancel, queue = self.cancel, self.queue
