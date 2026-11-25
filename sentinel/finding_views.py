@@ -26,6 +26,27 @@ CONFIDENCE = {
 }
 
 
+# Explain possible consequences without inferring successful exploitation.
+IMPACT = {
+    'HTTP': 'Traffic on this URL is not encrypted. Sensitive information could be exposed in transit; no interception was tested.',
+    'HSTS': 'Browsers may lack an instruction to insist on HTTPS. This is a missing protection, not proof that a connection was intercepted.',
+    'CSP': 'A browser protection against some injected scripts is missing. This does not establish that a script can be injected.',
+    'FRAME': 'A page might be embeddable in another site. Whether a visitor can be tricked into an unintended action has not been tested.',
+    'NOSNIFF': 'A browser protection against unexpected content interpretation is missing. No script execution was tested.',
+    'DISCLOSURE': 'Server identification can help someone learn about software in use. This alone does not establish a vulnerable version or access.',
+    'TLS_VERIFY': 'The connection could not be trusted by this computer. This may reflect a certificate or configuration problem; interception was not demonstrated.',
+    'CORS_CREDENTIAL_REFLECTION': 'The cross-origin response policy may allow untrusted sites to read credentialed responses. Only anonymous requests were tested, not access to private information.',
+    'CORS_ORIGIN_REFLECTION': 'The server allowed both synthetic origins. Some public resources intentionally allow cross-origin access; private information was not tested.',
+    'CORS_WILDCARD': 'Other websites may read permitted public responses. A wildcard by itself does not allow credentialed browser requests.',
+    'CORS_CONFLICT': 'The advertised settings conflict under browser rules. This is not evidence that a private response can be read.',
+}
+
+
+def impact_note(finding):
+    return IMPACT.get(finding.get('id'),
+                      'Review the observed evidence and the intended behavior of this service. '
+                      'This finding alone does not establish that anyone gained access.')
+
 @dataclass(frozen=True)
 class FindingView:
     index: int
@@ -78,6 +99,7 @@ def finding_detail(view):
             f"CONFIDENCE: {f.get('confidence', 'unknown')} — {confidence_note(f)}\n"
             f"SOURCE: {f.get('source', 'legacy')} | ID: {f['id']}\n"
             f"IDENTICAL OBSERVATIONS: {view.occurrences}\n\n"
+            f"WHY THIS MATTERS\n{impact_note(f)}\n\n"
             f"OBSERVED EVIDENCE\n{f['evidence']}\n\n"
             f"RECOMMENDED REMEDIATION\n{f['remediation']}\n\n"
             "After applying the fix, retest the same authorized scope and profile. "
