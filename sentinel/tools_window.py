@@ -366,7 +366,7 @@ class ToolsWindow(tk.Toplevel):
         t = self.tool
         kind = self.backend.get()
         if t.id == 'web-checkup':
-            self.info.set(t.blurb + '\nUses native tools first and a saved Docker toolkit for compatible checks. Open Tool setup to prepare or test the toolkit. Nikto requires a separate native installation.')
+            self.info.set(t.blurb + '\nUses native tools first and a saved Docker toolkit for compatible checks. Open Tool setup to prepare or test the toolkit. Nikto requires a separate native installation.' + '\n' + t.note)
             return
         if kind == 'native':
             availability = '' if t.installed() else '\nTool not found on this computer. Choose for me or Set up missing tools.'
@@ -422,8 +422,10 @@ class ToolsWindow(tk.Toplevel):
             if conf is None: return
             pid = self.app.store.project(name)
         except ToolMissing as e:
-            if os.name == 'nt' and self.tool.id == 'nmap':
-                self.open_tool_setup()
+            if os.name == 'nt' and self.tool.id in ('nmap', 'whatweb', 'sslscan'):
+                window = self.open_tool_setup()
+                window.choice.set('nmap' if self.tool.id == 'nmap' else 'toolkit')
+                window.pages.select(window.install_page)
             else:
                 messagebox.showinfo('Tool needed', str(e), parent=self)
             return
