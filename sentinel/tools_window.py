@@ -29,7 +29,7 @@ class ToolsWindow(tk.Toplevel):
         watch_poll(self)
         self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
-        self.title('Sentinel | Security tools'); self.geometry('920x620'); self.minsize(820, 560); self.configure(bg=CANVAS)
+        self.title('Sentinel | Security tools'); self.geometry('920x620'); self.minsize(820, 580); self.configure(bg=CANVAS)
         self.tool = TOOLS[0]; self.target = tk.StringVar(value=DEFAULTS['web']); self.profile = tk.StringVar()
         self.auth = tk.BooleanVar(); self.confirm = tk.StringVar(); self.status = tk.StringVar(value='Ready.')
         self.tool_name = tk.StringVar(value=self.tool.name); self.info = tk.StringVar(); self.label = tk.StringVar()
@@ -67,30 +67,37 @@ class ToolsWindow(tk.Toplevel):
         self.tabs.enable_traversal()
         # Settings use ordinary notebook pages, never a scrolling canvas.
         body = self.setup_page
-        ttk.Label(body, text='1. What do you want to check?', style='Title.TLabel').pack(anchor='w')
-        box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly')
+        columns = ttk.Frame(body)
+        columns.pack(fill='both', expand=True)
+        columns.columnconfigure(0, weight=1, uniform='settings')
+        columns.columnconfigure(1, weight=1, uniform='settings')
+        check = ttk.Frame(columns, padding=(0, 0, 10, 0))
+        check.grid(row=0, column=0, sticky='nsew')
+        setup = ttk.Frame(columns, padding=(10, 0, 0, 0))
+        setup.grid(row=0, column=1, sticky='nsew')
+        ttk.Label(check, text='1. What do you want to check?', style='Title.TLabel').pack(anchor='w')
+        box = ttk.Combobox(check, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly')
         box.pack(fill='x', pady=(4, 2))
         box.bind('<<ComboboxSelected>>', self.tool_changed)
-        ttk.Label(body, textvariable=self.info, wraplength=760, justify='left').pack(anchor='w', pady=(2, 4))
-        ttk.Label(body, textvariable=self.label, wraplength=745).pack(anchor='w')
-        ttk.Entry(body, textvariable=self.target).pack(fill='x', pady=(3, 6))
-        self.profiles = ttk.Frame(body)
+        ttk.Label(check, textvariable=self.info, wraplength=350, justify='left').pack(anchor='w', pady=(2, 4))
+        ttk.Label(check, textvariable=self.label, wraplength=350, justify='left').pack(anchor='w')
+        ttk.Entry(check, textvariable=self.target).pack(fill='x', pady=(3, 6))
+        self.profiles = ttk.Frame(check)
         self.profiles.pack(fill='x', pady=(1, 4))
-        ttk.Separator(body).pack(fill='x', pady=4)
-        ttk.Label(body, text='2. Choose the setup', style='Title.TLabel').pack(anchor='w')
+        ttk.Label(setup, text='2. Choose the setup', style='Title.TLabel').pack(anchor='w')
         self.engine_hint = tk.StringVar()
-        ttk.Label(body, textvariable=self.engine_hint, wraplength=745,
+        ttk.Label(setup, textvariable=self.engine_hint, wraplength=350, justify='left',
                   style='Muted.TLabel').pack(anchor='w', pady=(2, 5))
         self.recommendation_text = tk.StringVar(value='Let Sentinel choose an existing setup, or change it manually.')
         ttk.Label(self.engine_page, text='Advanced engine settings', style='Title.TLabel').pack(anchor='w', pady=(0, 4))
         ttk.Label(self.engine_page, textvariable=self.recommendation_text, wraplength=760,
                   style='Muted.TLabel', justify='left').pack(anchor='w', pady=(2, 5))
-        choice_row = ttk.Frame(body)
+        choice_row = ttk.Frame(setup)
         choice_row.pack(fill='x', pady=4)
         self.recommend_button = ttk.Button(choice_row, text='Choose for me', command=self.choose_engine)
-        self.recommend_button.pack(side='left')
+        self.recommend_button.pack(anchor='w', pady=(0, 3))
         self.advanced = tk.BooleanVar(value=False)
-        ttk.Button(choice_row, text='Engine settings', command=lambda: self.tabs.select(self.engine_page)).pack(side='left', padx=6)
+        ttk.Button(choice_row, text='Engine settings', command=lambda: self.tabs.select(self.engine_page)).pack(anchor='w', pady=(0, 3))
         self.tabs.bind('<<NotebookTabChanged>>', self.on_tab_changed)
         back = self.backend_row = ttk.Frame(self.engine_page)
         ttk.Label(back, text='Engine').pack(side='left')
@@ -105,14 +112,15 @@ class ToolsWindow(tk.Toplevel):
         self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
         if os.name == 'nt':
-            ttk.Button(choice_row, text='Set up missing tools', command=self.open_tool_setup).pack(side='left')
+            ttk.Button(choice_row, text='Set up missing tools', command=self.open_tool_setup).pack(anchor='w')
         self.saved_toolkit_button = ttk.Button(self.engine_page, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
 
         self.preparation_status = ttk.Label(self.engine_page, textvariable=self.wsl_status, style='Muted.TLabel',
                                             wraplength=760, justify='left')
         self.preparation_status.pack(anchor='w', pady=4)
-        ttk.Label(body, textvariable=self.recommendation_text, wraplength=760, justify='left',
+        ttk.Label(setup, textvariable=self.recommendation_text, wraplength=350, justify='left',
                   style='Muted.TLabel').pack(anchor='w', pady=(0, 2))
+        ttk.Separator(body).pack(fill='x', pady=4)
         conf = self.confirm_row = ttk.Frame(body)
         conf.pack(fill='x', pady=(4, 0))
         ttk.Checkbutton(conf, text='I have permission for this exact target and check (remembered until scope changes).',
@@ -380,7 +388,9 @@ class ToolsWindow(tk.Toplevel):
         for w in self.profiles.winfo_children(): w.destroy()
         first = next(iter(t.profiles)); self.profile.set(first)
         for p in t.profiles.values():
-            ttk.Radiobutton(self.profiles, text=f'{p.label} — {p.blurb}', variable=self.profile, value=p.id).pack(anchor='w')
+            ttk.Radiobutton(self.profiles, text=p.label, variable=self.profile, value=p.id).pack(anchor='w')
+            ttk.Label(self.profiles, text=p.blurb, style='Muted.TLabel', wraplength=325,
+                      justify='left').pack(anchor='w', padx=(20, 0), pady=(0, 2))
         self.say('Results appear here. Click a row for a plain-English explanation and how to fix it.')
 
     def start(self):
