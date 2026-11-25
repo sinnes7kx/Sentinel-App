@@ -1,4 +1,6 @@
 """Real Tk -> shared worker -> loopback HTTP -> SQLite integration."""
+import gc
+import hashlib
 import os
 import tempfile
 import threading
@@ -25,6 +27,8 @@ class Handler(BaseHTTPRequestHandler):
 
 class ApplicationTests(unittest.TestCase):
     def test_shared_scheduler_actual_http_history_and_scope_reset(self):
+        # Dispose destroyed Tk objects here before a later server thread triggers GC.
+        self.addCleanup(gc.collect)
         try:
             probe = tk.Tk(); probe.destroy()
         except tk.TclError:
@@ -43,6 +47,25 @@ class ApplicationTests(unittest.TestCase):
                     self.assertIs(tools.orchestrator, app.orchestrator)
                     tools.auth.set(True); tools.target.set('127.0.0.1')
                     self.assertFalse(tools.auth.get())
+                    tools.backend.set('wsl')
+                    with patch('sentinel.tools_window.wsl.distributions', return_value=['kali-linux', 'Debian']):
+                        tools.detect_wsl()
+                        deadline = time.monotonic() + 5
+                        while tools.wsl_busy and time.monotonic() < deadline:
+                            app.update(); time.sleep(.01)
+                    self.assertEqual(tools.environment.get(), 'kali-linux')
+                    self.assertIn('2 distribution', tools.wsl_status.get())
+                    with patch('sentinel.tools_window.wsl.available_tools', return_value=['timeout', 'sslscan']):
+                        tools.check_wsl()
+                        deadline = time.monotonic() + 5
+                        while tools.wsl_busy and time.monotonic() < deadline:
+                            app.update(); time.sleep(.01)
+                    self.assertIn('Available — sslscan', tools.wsl_status.get())
+                    self.assertIn('Missing — nmap, whatweb', tools.wsl_status.get())
+                    tools.backend.set('docker')
+                    tools.environment.set('fixture-image')
+                    tools.backend.set('wsl')
+                    self.assertEqual(tools.environment.get(), 'kali-linux')
                     timer = tools.poll_timer
                     tools.destroy()
                     self.assertNotIn(timer, app.tk.call('after', 'info'))
@@ -55,6 +78,30 @@ class ApplicationTests(unittest.TestCase):
                     records = app.store.history(app.store.project(app.project.get()))
                     self.assertEqual(records[0][1]['status'], 'completed')
                     self.assertEqual([e['state'] for e in records[0][1]['events']], ['queued', 'running', 'completed'])
+                    self.assertEqual(app.assessment_count.get(), '1')
+                    self.assertEqual(app.observation_count.get(), str(len(records[0][1]['findings'])))
+
+                    utilities = app.open_local_utilities()
+                    utilities.withdraw()
+                    self.assertIs(utilities.orchestrator, app.orchestrator)
+                    fixture = Path(directory) / 'capture.csv'
+                    data = b'No.,Protocol\n1,TLS\n'
+                    fixture.write_bytes(data)
+                    utilities.integrity_path.set(str(fixture))
+                    utilities.expected_digest.set(hashlib.sha256(data).hexdigest())
+                    utilities.start_integrity()
+                    deadline = time.monotonic() + 5
+                    while utilities.busy and time.monotonic() < deadline:
+                        app.update(); time.sleep(.01)
+                    self.assertIn('SHA-256 · Match', utilities.integrity_output.get('1.0', 'end'))
+                    utilities.report_format.set('Wireshark · Packet-list CSV')
+                    utilities.report_path.set(str(fixture))
+                    utilities.start_review()
+                    deadline = time.monotonic() + 5
+                    while utilities.busy and time.monotonic() < deadline:
+                        app.update(); time.sleep(.01)
+                    self.assertIn('Packets in export  1', utilities.report_output.get('1.0', 'end'))
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 1)
                 finally:
                     app.cancel_event.set(); app.orchestrator.shutdown(); app.store.close(); app.destroy()
                     app.orchestrator.worker.join(3)

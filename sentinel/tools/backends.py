@@ -8,6 +8,10 @@ from . import runner
 SUPPORTED = {'nmap', 'sslscan', 'whatweb'}
 
 
+def is_wsl_distribution(name):
+    return re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', name) is not None
+
+
 @dataclass(frozen=True)
 class Backend:
     kind: str = 'native'
@@ -20,7 +24,7 @@ class Backend:
             return
         if tool not in SUPPORTED:
             raise ValueError('This backend supports Nmap, sslscan and WhatWeb individually; select one of these tools.')
-        if self.kind == 'wsl' and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', self.environment):
+        if self.kind == 'wsl' and not is_wsl_distribution(self.environment):
             raise ValueError('Enter the exact installed WSL distribution name.')
         if self.kind == 'docker' and not re.fullmatch(r'[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}', self.environment):
             raise ValueError('Choose a locally installed Docker image pinned with @sha256 and its 64-character digest.')

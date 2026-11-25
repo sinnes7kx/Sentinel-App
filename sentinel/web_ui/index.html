@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sentinel · Website security</title>
+    <link rel="stylesheet" href="/app.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="shell topbar">
+        <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Sentinel</a>
+        <nav aria-label="Dashboard">
+          <a href="#assessment">Assessment</a>
+          <a href="#review">Tool reports</a>
+        </nav>
+      </div>
+    </header>
+    <main class="shell">
+      <div class="intro">
+        <h1>Website security</h1>
+        <p>Check HTTPS, browser protections, and cookies for a single page.</p>
+      </div>
+      <div class="layout">
+        <div class="workspace-column">
+          <section id="assessment" class="panel" aria-labelledby="assessment-heading">
+            <header class="panel-heading">
+              <h2 id="assessment-heading">New assessment</h2>
+            </header>
+            <form id="assessment-form">
+              <label for="url">Website URL</label>
+              <input id="url" type="url" placeholder="https://example.com/" maxlength="2048" required>
+              <div class="form-options">
+                <label class="choice">
+                  <input id="include-dns" type="checkbox" disabled> Also check DNS records
+                </label>
+                <p id="dns-hint" class="hint" hidden></p>
+                <div id="dns-field" hidden>
+                  <label for="dns">Domain to check</label>
+                  <input id="dns" type="text" placeholder="example.com" maxlength="253" spellcheck="false">
+                  <p class="hint">Looks up email authentication, mail routing, and certificate authority records.</p>
+                </div>
+              </div>
+              <label class="choice permission">
+                <input id="authorized" type="checkbox" required>
+                <span>I own the website and any selected domain, or I have explicit permission to check them.</span>
+              </label>
+              <div class="form-actions">
+                <button id="run" type="submit">Run assessment</button>
+                <p id="assessment-status" class="hint status" role="status"></p>
+              </div>
+            </form>
+          </section>
+
+          <section id="results" class="panel" hidden aria-labelledby="results-heading">
+            <header class="panel-heading section-top">
+              <div>
+                <h2 id="results-heading" tabindex="-1">Assessment results</h2>
+                <p id="result-target" class="hint"></p>
+              </div>
+              <div class="downloads">
+                <a id="download-html" download>Export HTML</a>
+                <a id="download-json" download>Export JSON</a>
+              </div>
+            </header>
+            <div class="panel-body">
+              <p id="result-summary"></p>
+              <p id="result-error" class="error" hidden></p>
+              <p id="result-coverage" class="hint"></p>
+              <div id="findings"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="workspace-column">
+          <section class="panel" aria-labelledby="history-heading">
+            <header class="panel-heading"><h2 id="history-heading">Recent assessments</h2></header>
+            <p id="history-status" class="hint" role="status">Loading local history…</p>
+            <ul id="history"></ul>
+          </section>
+          <section id="review" class="panel" aria-labelledby="review-heading">
+            <header class="panel-heading"><h2 id="review-heading">Review a tool report</h2></header>
+            <form id="review-form">
+              <p class="hint">Summarize a local export without saving the file.</p>
+              <label for="tool">Report format</label>
+              <select id="tool">
+                <option value="zap">ZAP · Traditional JSON</option>
+                <option value="nmap">Nmap · XML</option>
+                <option value="wireshark">Wireshark · Packet-list CSV</option>
+              </select>
+              <label for="report-file">Report file <span class="hint">(up to 5 MB)</span></label>
+              <input id="report-file" type="file" accept=".json" required>
+              <div class="form-actions">
+                <button id="read-report" class="secondary" type="submit">Summarize report</button>
+                <p id="review-status" class="hint status" role="status"></p>
+              </div>
+            </form>
+            <dl id="review-result" hidden></dl>
+          </section>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

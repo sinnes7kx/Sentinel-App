@@ -8,6 +8,7 @@ from .ui_lifecycle import watch_poll
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from .dependencies import assess
+from .desktop_theme import CANVAS, detail_box
 
 
 class DependencyWindow(tk.Toplevel):
@@ -16,6 +17,7 @@ class DependencyWindow(tk.Toplevel):
         watch_poll(self)
         self.title('Sentinel | Local dependency check')
         self.geometry('880x650')
+        self.configure(background=CANVAS)
         self.orchestrator = for_app(app)
         self.app = app
         self.cancel_event = Event()
@@ -53,7 +55,7 @@ class DependencyWindow(tk.Toplevel):
             self.tree.heading(column, text=label)
         self.tree.pack(fill='both', expand=True)
         self.tree.bind('<<TreeviewSelect>>', self.selected)
-        self.detail = tk.Text(body, height=9, wrap='word')
+        self.detail = detail_box(body, height=9)
         self.detail.pack(fill='both', expand=True, pady=8)
         self.say('Affected: an advisory matches this version.\nNo match in supplied feed: only these records were checked.\nUnknown: more information is needed.\n\nA result is not proof of exploitability or overall safety. Feed freshness is not verified.')
         self.poll_timer = self.after(100, self.poll)
@@ -88,11 +90,12 @@ class DependencyWindow(tk.Toplevel):
         self.tree.delete(*self.tree.get_children())
         self.button.configure(state='disabled')
         self.status.set('Reading local files…')
-        self.cancel_event = Event()
+        cancel = self.cancel_event = Event()
+        queue = self.queue
         try:
             self.job = self.orchestrator.submit(
-                lambda: assess(inventory, feed, format, cancel=self.cancel_event),
-                lambda result, error: self.queue.put((result, error)), self.cancel_event)
+                lambda: assess(inventory, feed, format, cancel=cancel),
+                lambda result, error: queue.put((result, error)), cancel)
         except RuntimeError as exc:
             self.queue.put((None, str(exc)))
 

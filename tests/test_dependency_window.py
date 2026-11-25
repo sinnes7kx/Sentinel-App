@@ -1,3 +1,4 @@
+import gc
 import time
 import tkinter as tk
 import unittest
@@ -6,6 +7,7 @@ from sentinel.dependency_window import DependencyWindow
 
 class DependencyWindowTests(unittest.TestCase):
     def test_example_can_be_assessed_and_explained(self):
+        self.addCleanup(gc.collect)
         try:
             root = tk.Tk()
         except tk.TclError:
@@ -32,3 +34,4 @@ class DependencyWindowTests(unittest.TestCase):
             self.assertIn('NEXT STEP', window.detail.get('1.0', 'end'))
         finally:
             root.destroy()
+            root.orchestrator.worker.join(3)

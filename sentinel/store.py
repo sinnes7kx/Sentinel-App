@@ -27,6 +27,10 @@ class Store:
         with self.conn:
             cur = self.conn.execute('INSERT INTO scans(project,target,started,result) VALUES (?,?,?,?)',(project,result['target'],result['started'],json.dumps(result)))
         return cur.lastrowid
-    def history(self, project):
-        return [(r[0],sanitize(json.loads(r[1]))) for r in self.conn.execute('SELECT id,result FROM scans WHERE project=? ORDER BY id DESC',(project,))]
+    def history(self, project, limit=-1):
+        return [(r[0],sanitize(json.loads(r[1]))) for r in self.conn.execute(
+            'SELECT id,result FROM scans WHERE project=? ORDER BY id DESC LIMIT ?', (project, limit))]
+    def result(self, project, scan_id):
+        row = self.conn.execute('SELECT result FROM scans WHERE project=? AND id=?', (project, scan_id)).fetchone()
+        return sanitize(json.loads(row[0])) if row else None
     def close(self): self.conn.close()
