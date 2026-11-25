@@ -6,6 +6,7 @@ import http.client
 import ssl
 import re
 from .evidence import sanitize
+from .pinned_http import resolve_once, PinnedConnector
 
 @dataclass(frozen=True)
 class Target:
@@ -124,6 +125,8 @@ def scan(value, authorized=False, timeout=8, cancel=None, dns_domain=''):
     target = Target.parse(value)
     started = datetime.now(timezone.utc).isoformat(timespec='seconds')
     conn = None
+    connector = None
+    endpoints = ()
     tls = None
     from .posture import observations
     if cancel and cancel.is_set():
@@ -133,10 +136,15 @@ def scan(value, authorized=False, timeout=8, cancel=None, dns_domain=''):
         dns_domain = domain_name(dns_domain)
     try:
         timeout = min(15, max(1, float(timeout)))
+        endpoints = resolve_once(target.host, target.port)
+        if cancel and cancel.is_set():
+            return Scan(target.url, started, 'cancelled', None, None, [], 'Cancelled after resolution; no connection made.')
+        connector = PinnedConnector(target.host, target.port, endpoints, cancel)
         if target.scheme == 'https':
             conn = http.client.HTTPSConnection(target.host, target.port, timeout=timeout, context=ssl.create_default_context())
         else:
             conn = http.client.HTTPConnection(target.host, target.port, timeout=timeout)
+        conn._create_connection = connector
         conn.connect()
         cert = None
         cipher = None
@@ -154,6 +162,9 @@ def scan(value, authorized=False, timeout=8, cancel=None, dns_domain=''):
         findings = inspect_headers(target, status, headers, tls, cert) + observations(headers, status, tls, cipher)
         conn.close()
         coverage={'http':'completed','tls':'verified connection' if tls else 'not applicable','dns':'not requested'}
+        coverage.update({'connection_address': connector.selected,
+                         'resolved_addresses': [e.address for e in endpoints],
+                         'scope_note': 'One connected address from a single DNS snapshot; other addresses not assessed.'})
         result=Scan(target.url, started, 'completed', status, tls, findings, coverage=coverage, dns_domain=dns_domain)
         if cancel and cancel.is_set():
             result.status='cancelled'; result.error='Cancelled after HTTP response; remaining checks not run.'; return result
@@ -168,6 +179,8 @@ def scan(value, authorized=False, timeout=8, cancel=None, dns_domain=''):
         f = Finding('TLS_VERIFY','high','TLS certificate verification failed','The platform trust store rejected the certificate or hostname. No HTTP request was sent.','Check certificate validity, hostname, chain and trusted CA configuration. Never bypass verification as a fix.')
         return Scan(target.url, started, 'partial', None, None, [f], 'Certificate verification failed; HTTP checks not performed.', coverage={'http':'not performed','tls':'verification failed','dns':'not performed'}, dns_domain=dns_domain)
     except (OSError, http.client.HTTPException, ValueError) as exc:
+        if cancel and cancel.is_set():
+            return Scan(target.url, started, 'cancelled', None, tls, [], 'Cancelled during connection.', dns_domain=dns_domain)
         return Scan(target.url, started, 'failed', None, tls, [], type(exc).__name__ + ': connection or protocol error; no clean bill of health.', coverage={'http':'unknown','tls':'unknown','dns':'not performed'}, dns_domain=dns_domain)
     finally:
         if conn is not None:
@@ -180,6 +193,10 @@ def compare(previous, current):
     if previous.get('profile','web-v1') != current.get('profile','web-v1') or previous.get('dns_domain','') != current.get('dns_domain',''):
         return {'comparable':False, 'new':[], 'still_present':[], 'not_observed':[]}
     if previous['status'] != 'completed' or current['status'] != 'completed' or previous['http_status'] != current['http_status']:
+        return {'comparable':False, 'new':[], 'still_present':[], 'not_observed':[]}
+    old_address = previous.get('coverage', {}).get('connection_address')
+    new_address = current.get('coverage', {}).get('connection_address')
+    if old_address != new_address:
         return {'comparable':False, 'new':[], 'still_present':[], 'not_observed':[]}
     p = {f['id'] for f in previous['findings']}; c = {f['id'] for f in current['findings']}
     return {'comparable':True,'new':sorted(c-p),'still_present':sorted(p&c),'not_observed':sorted(p-c)}
