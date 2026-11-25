@@ -163,7 +163,7 @@ class GuidedWindow(tk.Toplevel):
         ttk.Label(panel, text='Assessment depth').pack(anchor='w')
         ttk.Radiobutton(panel, text='Quick — built-in configuration checks',
                         variable=profile, value='Quick').pack(anchor='w')
-        ttk.Radiobutton(panel, text='Standard — plan additional checks for manual review',
+        ttk.Radiobutton(panel, text='Standard — built-in checks plus modern TLS verification',
                         variable=profile, value='Standard').pack(anchor='w')
         area = tk.Text(panel, height=14, wrap='word', state='disabled')
         area.pack(fill='both', expand=True, pady=8)
@@ -188,16 +188,17 @@ class GuidedWindow(tk.Toplevel):
             area.configure(state='disabled')
             proceed.configure(state='normal' if approved_plan else 'disabled')
 
-        def continue_quick():
+        def continue_assessment():
             if approved_plan is None:
                 return
             self.app.url.set(approved_plan.target)
             self.app.dns.set('')
+            self.app.assessment_profile.set(approved_plan.profile)
             self.app.auth.set(False)
             self.destroy()
             self.app.lift()
 
-        proceed = ttk.Button(panel, text='Continue to quick check', command=continue_quick)
+        proceed = ttk.Button(panel, text='Continue to authorization', command=continue_assessment)
         proceed.pack(anchor='w')
         ttk.Label(panel, text='No assessment starts here. Confirm permission in the main window.',
                   wraplength=500).pack(anchor='w', pady=4)
