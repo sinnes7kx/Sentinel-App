@@ -203,7 +203,7 @@ class BackendTests(unittest.TestCase):
         self.assertIn('--xml=/work/out.xml', calls[0])
         for flag in ('--pull=never', '--memory=512m', '--cpus=1', '--cap-drop=ALL'):
             self.assertIn(flag, calls[0])
-        self.assertEqual(calls[1][:3], ['docker', 'rm', '--force'])
+        self.assertEqual(calls[1][3:5], ['rm', '--force'])
         self.assertEqual(calls[1][-1], calls[0][calls[0].index('--name')+1])
 
     def test_docker_cleanup_even_if_launcher_fails(self):
@@ -215,7 +215,8 @@ class BackendTests(unittest.TestCase):
             return RunResult(0, '', '')
         with self.assertRaises(OSError):
             Backend('docker', 'x').run(['nmap', '127.0.0.1'], 1, None, '/tmp/job', invoke)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[2][3:6], ['container', 'ls', '-a'])
 
     def test_wsl_uses_exec_fixed_distribution_and_remote_deadline(self):
         calls = []
