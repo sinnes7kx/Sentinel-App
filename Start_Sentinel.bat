@@ -17,11 +17,11 @@ pause
 exit /b 1
 
 :launcher
-py -3 run.py %*
+py -3 launch_private.py %*
 goto finished
 
 :interpreter
-"%SENTINEL_PYTHON%" run.py %*
+"%SENTINEL_PYTHON%" launch_private.py %*
 
 :finished
 if not errorlevel 1 exit /b 0
