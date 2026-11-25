@@ -67,7 +67,8 @@ class ToolSetupWindow(tk.Toplevel):
                              ('Nmap — native Windows', 'nmap'),
                              ('Docker Desktop — Linux runtime', 'docker'),
                              ('Kali toolkit — WhatWeb and sslscan via Docker', 'toolkit'),
-                             ('ZAP — optional web security engine (larger download)', 'zap')):
+                             ('ZAP — optional web security engine (larger download)', 'zap'),
+                             ('Check for ZAP updates', 'zap-update')):
             radio = ttk.Radiobutton(body, text=label, value=value, variable=self.choice)
             radio.pack(anchor='w', pady=4)
             self.options.append(radio)
@@ -153,9 +154,10 @@ class ToolSetupWindow(tk.Toplevel):
         if self.busy:
             return
         kind = self.choice.get()
-        if not messagebox.askokcancel('Prepare tools',
-                'Allow Sentinel to detect and download the selected components if needed? Vendor installers may open. No assessment will start.',
-                parent=self):
+        prompt = ('Check the official ZAP stable image for updates? This may download a large image and install Docker if missing. No assessment will start.'
+                  if kind == 'zap-update' else
+                  'Allow Sentinel to detect and download the selected components if needed? Vendor installers may open. No assessment will start.')
+        if not messagebox.askokcancel('Prepare tools', prompt, parent=self):
             return
         self.cancel = Event()
         cancel, queue = self.cancel, self.queue

@@ -70,3 +70,35 @@ class ZapSetupTests(unittest.TestCase):
         invoke = Mock()
         self.assertEqual(prepare_zap(PREFIX, cancel, invoke)['status'], 'cancelled')
         invoke.assert_not_called()
+
+    def test_refresh_checks_upstream_even_when_local_image_exists(self):
+        calls, invoke = self.fake()
+        result = prepare_zap(PREFIX, Event(), invoke, refresh=True)
+        self.assertEqual(result['status'], 'completed')
+        self.assertIn('Image unchanged.', result['message'])
+        self.assertEqual([c[3] for c in calls], ['image', 'pull', 'image', 'run', 'rm', 'container'])
+
+    def test_refresh_failure_never_claims_success_or_runs_old_image(self):
+        calls = []
+        def invoke(argv, timeout, cancel):
+            calls.append(argv)
+            return RunResult(0, ID + ' ' + DIGEST, '') if argv[3] == 'image' else RunResult(1, '', 'failed')
+        result = prepare_zap(PREFIX, Event(), invoke, refresh=True)
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual([c[3] for c in calls], ['image', 'pull'])
+
+    def test_refresh_detects_changed_image(self):
+        updated = 'sha256:' + 'd' * 64
+        calls = []
+        def invoke(argv, timeout, cancel):
+            calls.append(argv)
+            if argv[3] == 'image':
+                return RunResult(0, (ID if len(calls) == 1 else updated) + ' ' + DIGEST, '')
+            if argv[3] == 'run':
+                self.assertEqual(argv[-3], updated)
+                return RunResult(0, '2.17.1', '')
+            return RunResult(0, '', '')
+        result = prepare_zap(PREFIX, Event(), invoke, refresh=True)
+        self.assertEqual(result['status'], 'completed')
+        self.assertIn('Image changed.', result['message'])
+        self.assertEqual(result['zap_image'], updated)

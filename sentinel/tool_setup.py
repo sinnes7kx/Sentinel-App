@@ -77,7 +77,7 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
     dockerfile = DOCKERFILE if dockerfile is None else dockerfile
     if platform != 'nt':
         raise ValueError('Automatic installation currently supports Windows only.')
-    if kind not in ('nmap', 'docker', 'toolkit', 'all', 'zap'):
+    if kind not in ('nmap', 'docker', 'toolkit', 'all', 'zap', 'zap-update'):
         raise ValueError('Unknown setup option.')
 
     def result(status, message, **extra):
@@ -132,8 +132,8 @@ def setup(kind, cancel, platform=None, install=install_package, invoke=runner.ru
         return result('partial', 'Docker installed or detected. Open Docker Desktop, review its terms, and start the Linux engine. Restart Windows if requested, then retry.', next_action='start_docker')
     if kind == 'docker':
         return result('completed', 'Local Linux Docker engine responded. No scanner was launched.')
-    if kind == 'zap':
-        return prepare_zap(prefix, cancel, invoke)
+    if kind in ('zap', 'zap-update'):
+        return prepare_zap(prefix, cancel, invoke, refresh=kind == 'zap-update')
     if cancel.is_set():
         return result('cancelled', 'Setup cancelled before preparing Kali tools.')
     if (payload / 'rootfs.sha256').is_file():
