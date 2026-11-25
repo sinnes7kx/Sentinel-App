@@ -4,7 +4,7 @@
 
 Run `Sentinel-Windows-x64.exe`, then open **Sentinel** from Start. The installer includes Python/Tk, the dependency and DNS libraries, Microsoft WSL, and a Kali filesystem containing **WhatWeb** and **sslscan**. The four summary cards and three-pane desktop show findings, actions, evidence and project history from your local assessments.
 
-Open **Security tools**, choose **wsl** or **docker**, then **Prepare included tools**. Setup checks the local archive, registers it and remembers the verified environment. Choose WhatWeb for an authorized IP URL or sslscan for a TLS endpoint. Choose a profile, confirm scope and select **Start**.
+Open **Security tools**, choose **wsl** or **docker**, then **Prepare included tools**. Setup checks the local archive, registers it and remembers the verified environment. WhatWeb connects directly to the approved IP in WSL and Docker. Choose WhatWeb for an authorized IP URL or sslscan for a TLS endpoint. Choose a profile, confirm scope and select **Start**.
 
 - **WSL 2** is the bundled path for x64 Windows 11 with hardware virtualization enabled. Initial setup can request Windows administrator approval for Virtual Machine Platform and the signed Microsoft WSL installer. If Windows requests a reboot, restart and select **Prepare included tools** again.
 - **Docker** uses a running Linux-container engine on the same computer. Sentinel imports the included archive and runs its immutable local image ID. The Windows installer includes WSL for computers without a Docker engine.

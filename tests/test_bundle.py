@@ -103,6 +103,9 @@ class OfflineToolkitTests(unittest.TestCase):
                     if cmd[1] == 'run':
                         self.assertIn(flag, cmd)
                         self.assertNotIn('--mount', cmd)
+                        if spec.id == 'whatweb':
+                            self.assertIn('--env=http_proxy=', cmd)
+                            self.assertIn('--env=HTTP_PROXY=', cmd)
                         self.assertIn('--no-heartbleed' if spec.id == 'sslscan' else '--quiet', cmd)
                     return RunResult(0, output, '')
                 result = spec.scan(url, profile, True, backend=Backend('docker', self.image), run=invoke)
