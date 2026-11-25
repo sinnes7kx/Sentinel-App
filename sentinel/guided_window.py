@@ -5,7 +5,7 @@ from .assessment_plan import website_plan
 from .readiness import Readiness, inventory
 from .runtime_health import diagnostics
 from .orchestration import for_app
-from .ui_lifecycle import watch_poll
+from .ui_lifecycle import watch_poll, bind_escape
 from queue import Queue, Empty
 from threading import Event
 
@@ -22,6 +22,7 @@ class GuidedWindow(tk.Toplevel):
         self.health_cancel = Event()
         self.health_busy = False
         watch_poll(self)
+        bind_escape(self)
         self.bind('<Destroy>', self.on_destroy, add='+')
         body = ttk.Frame(self, padding=18)
         body.pack(fill='both', expand=True)
@@ -151,6 +152,7 @@ class GuidedWindow(tk.Toplevel):
             existing.lift()
             return
         window = tk.Toplevel(self, name='website_plan')
+        bind_escape(window)
         window.title('Sentinel | Review website assessment')
         window.geometry('680x560')
         window.minsize(560, 440)
