@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import venv
 
 ROOT = Path(__file__).resolve().parent
 
@@ -28,7 +27,10 @@ def prepare(root=ROOT, env=None, invoke=subprocess.run, create=None):
     marker = env / '.sentinel-requirements'
     if not executable.is_file():
         print('Creating Sentinel private Python environment...', flush=True)
-        (create or venv.EnvBuilder(with_pip=True, system_site_packages=False).create)(env)
+        if create is None:
+            import venv
+            create = venv.EnvBuilder(with_pip=True, system_site_packages=False).create
+        create(env)
     if not executable.is_file():
         raise RuntimeError('Private Python environment could not be created.')
     ready = marker.is_file() and marker.read_text(encoding='ascii').strip() == digest
@@ -45,7 +47,7 @@ def prepare(root=ROOT, env=None, invoke=subprocess.run, create=None):
 def main():
     try:
         executable = prepare()
-        return subprocess.call([str(executable), '-E', '-s', '-B', str(ROOT / 'run.py'), *sys.argv[1:]],
+        return subprocess.call([str(executable), '-E', '-s', str(ROOT / 'run.py'), *sys.argv[1:]],
                                cwd=str(ROOT))
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         print('Sentinel private environment setup failed: ' + str(exc), file=sys.stderr)
