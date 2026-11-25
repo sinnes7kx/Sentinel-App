@@ -29,6 +29,7 @@ class AccessLabWindow(tk.Toplevel):
         body = ttk.Frame(self, padding=10)
         body.pack(fill='both', expand=True)
         ttk.Label(body, text='Verify a security failure', style='Title.TLabel').pack(anchor='w')
+        ttk.Button(body, text='Check my live website', command=self.open_live).pack(anchor='w', pady=4)
         self.kind = tk.StringVar(value='Access control')
         self.selector = ttk.Combobox(body, textvariable=self.kind, state='readonly',
                                      values=('Access control', 'Database input handling', 'XSS (browser practice)'))
@@ -61,6 +62,16 @@ class AccessLabWindow(tk.Toplevel):
         self.selector.bind('<<ComboboxSelected>>', self.change_kind)
         self.change_kind()
         self.poll_timer = self.after(100, self.poll)
+
+    def open_live(self):
+        from .live_input_window import LiveInputWindow
+        app = self.master
+        window = app.children.get('live_input')
+        if window is None:
+            LiveInputWindow(app)
+        else:
+            window.deiconify()
+            window.lift()
 
     def change_kind(self, _event=None):
         if self.busy:

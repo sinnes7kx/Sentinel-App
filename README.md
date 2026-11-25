@@ -15,6 +15,8 @@ The product name is **Sentinel**. The existing application data directory, proje
 
 ## New to security testing?
 
+**Verification lab → Check my live website** sends two harmless anonymous requests to one authorized read-only page and input, using a single DNS snapshot and the same peer. For a search URL ending in `/search?q=hello`, enter the page address ending in `/search` and input name `q`. Results distinguish raw inert markup, encoded text, and no exact reflection. No redirects, executable scripts, login or saved response body. This is a live reflection check, not confirmed XSS exploitation. Repeat after fixing output encoding.
+
 Start with **Website assessment** for an authorized site. You do not need an imported report or an extra tool. **Verification lab** includes local access-control and database experiments and a fixed XSS browser example. XSS practice opens a local HTML page; observe the weak and protected examples yourself. It does not automatically measure browser execution or check an external site.
 
 **CVE review** checks whether a known software problem in a supplied NVD JSON 2.0 advisory file might apply to your exact software version. **Try fake example** needs no file. Real matching requires the software identity and a downloaded advisory list.
