@@ -1,5 +1,6 @@
 """Beginner window for every integrated security tool."""
-from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope, bind_escape
+from .ui_lifecycle import watch_poll, watch_variables, bind_escape
+from .scan_confirmation import confirm_tool
 from .finding_views import finding_views, finding_detail
 import tkinter as tk
 from .desktop_theme import CANVAS, PANEL, SEVERITY_COLORS, detail_box, scrollable
@@ -31,7 +32,7 @@ class ToolsWindow(tk.Toplevel):
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
         self.title('Sentinel | Security tools'); self.geometry('920x620'); self.minsize(820, 580); self.configure(bg=CANVAS)
         self.tool = TOOLS[0]; self.target = tk.StringVar(value=DEFAULTS['web']); self.profile = tk.StringVar()
-        self.auth = tk.BooleanVar(); self.confirm = tk.StringVar(); self.status = tk.StringVar(value='Ready.')
+        self.confirming = False; self.status = tk.StringVar(value='Ready.')
         self.tool_name = tk.StringVar(value=self.tool.name); self.info = tk.StringVar(); self.label = tk.StringVar()
         self.backend = tk.StringVar(value='native'); self.environment = tk.StringVar()
         self.environment_values = {'wsl': '', 'docker': ''}
@@ -123,16 +124,6 @@ class ToolsWindow(tk.Toplevel):
         self.preparation_status.pack(anchor='w', pady=4)
         ttk.Label(setup, textvariable=self.recommendation_text, wraplength=350, justify='left',
                   style='Muted.TLabel').pack(anchor='w', pady=(0, 2))
-        conf = self.confirm_row = ttk.Frame(body)
-        conf.pack(side='bottom', fill='x', pady=(4, 0), before=columns)
-        ttk.Separator(body).pack(side='bottom', fill='x', pady=4, before=columns)
-        ttk.Checkbutton(conf, text='I have permission for this exact target and check (remembered until scope changes).',
-                        variable=self.auth).pack(anchor='w', pady=(0, 4))
-        confirm_line = ttk.Frame(conf)
-        confirm_line.pack(fill='x')
-        ttk.Label(confirm_line, text='Public target confirmation (hostname or IP)').pack(side='left', padx=(0, 6))
-        self.confirm_entry = ttk.Entry(confirm_line, textvariable=self.confirm, width=30)
-        self.confirm_entry.pack(side='left', fill='x', expand=True)
 
         action = ttk.Frame(shell, style='Canvas.TFrame')
         action.pack(side='bottom', fill='x', pady=(4, 0), before=self.tabs)
@@ -166,8 +157,6 @@ class ToolsWindow(tk.Toplevel):
         detail.pack(fill='both', expand=True)
         self.detail = detail_box(detail, height=9)
         scrollable(detail, self.detail)
-        watch_authorized_scope(self, (self.app.project, self.tool_name, self.target, self.profile,
-                                      self.backend, self.environment), self.auth)
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
         watch_variables(self, (self.target,), self.target_changed_for_recommendation)
@@ -370,7 +359,7 @@ class ToolsWindow(tk.Toplevel):
             return
         old = self.tool.kind; self.tool = chosen
         if self.tool.kind != old and self.target.get() in DEFAULTS.values(): self.target.set(DEFAULTS[self.tool.kind])
-        self.auth.set(False); self.refresh_tool(); self.recommendation_text.set('Choose for me to select an existing setup for this check.'); self.update_backend_controls()
+        self.refresh_tool(); self.recommendation_text.set('Choose for me to select an existing setup for this check.'); self.update_backend_controls()
 
     def update_tool_info(self):
         t = self.tool
@@ -401,15 +390,21 @@ class ToolsWindow(tk.Toplevel):
         self.say('Results appear here. Click a row for a plain-English explanation and how to fix it.')
 
     def start(self):
-        if self.busy or self.wsl_busy: return
+        if self.busy or self.wsl_busy or self.confirming: return
         try:
-            if not self.auth.get(): raise PermissionError('Confirm that you own this target or have written permission to test it.')
+            tool, value, prof = self.tool, self.target.get(), self.profile.get()
+            if prof not in tool.profiles: raise ValueError('Unknown assessment profile.')
             backend = Backend(self.backend.get(), self.environment.get().strip())
-            backend.validate(self.tool.id)
-            if backend.kind == 'native' and not self.tool.installed(): raise ToolMissing(self.tool.install_hint)
-            if backend.kind == 'wsl':
-                if not messagebox.askokcancel('WSL execution', 'WSL execution is experimental. Stop ends the Windows launcher, but Linux work may continue until its profile time limit. Use native or Docker for stronger cancellation. Continue?', parent=self): return
-            name = self.app.project.get(); pid = self.app.store.project(name)
+            backend.validate(tool.id)
+            if backend.kind == 'native' and not tool.installed(): raise ToolMissing(tool.install_hint)
+            name = self.app.project.get()
+            self.confirming = True
+            try:
+                conf = confirm_tool(self, tool, value, prof, backend)
+            finally:
+                self.confirming = False
+            if conf is None: return
+            pid = self.app.store.project(name)
         except ToolMissing as e:
             if os.name == 'nt' and self.tool.id == 'nmap':
                 self.open_tool_setup()
@@ -423,8 +418,8 @@ class ToolsWindow(tk.Toplevel):
         self.tabs.select(self.results_page)
         self.result = None
         self.presented_findings = {}
-        self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
-        tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
+        self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
+        ev = self.cancel_event
         queue = self.queue
         def operation():
             if backend.kind == 'wsl':
