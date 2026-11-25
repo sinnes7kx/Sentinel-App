@@ -6,6 +6,7 @@ from tkinter import filedialog, ttk
 
 from .desktop_theme import CANVAS, detail_box, scrollable
 from .local_tools import inspect_integrity, review_report
+from .help_examples import zap_example
 from .orchestration import for_app
 from .ui_lifecycle import watch_poll, watch_variables, bind_escape
 
@@ -23,7 +24,7 @@ class LocalUtilitiesWindow(tk.Toplevel):
         watch_poll(self)
         bind_escape(self)
         self.title('Sentinel | Local utilities')
-        self.geometry('720x480')
+        self.geometry('760x550')
         self.minsize(600, 430)
         self.configure(background=CANVAS)
         self.orchestrator = for_app(app)
@@ -60,10 +61,10 @@ class LocalUtilitiesWindow(tk.Toplevel):
     def build_integrity(self, notebook):
         pane = ttk.Frame(notebook, padding=8)
         notebook.add(pane, text='File integrity')
-        ttk.Label(pane, text='Compute SHA-256 and SHA-512 to identify a file or verify a trusted checksum.',
+        ttk.Label(pane, text='Check whether a file has changed. A hash is like a fingerprint for a file; compare it with a trusted fingerprint from the file maker. This is not a virus scan.',
                   style='Muted.TLabel', wraplength=515).pack(anchor='w', pady=(0, 5))
         self.file_field(pane, 'File to check', self.integrity_path)
-        ttk.Label(pane, text='Reference digest (optional)').pack(anchor='w', pady=(7, 0))
+        ttk.Label(pane, text='Trusted file fingerprint (optional)').pack(anchor='w', pady=(7, 0))
         expected = ttk.Entry(pane, textvariable=self.expected_digest)
         expected.pack(fill='x', pady=(3, 0))
         self.controls.append(expected)
@@ -73,15 +74,43 @@ class LocalUtilitiesWindow(tk.Toplevel):
     def build_review(self, notebook):
         pane = ttk.Frame(notebook, padding=8)
         notebook.add(pane, text='Tool report review')
-        ttk.Label(pane, text='Summarize a local export up to 5 MB.', style='Muted.TLabel').pack(anchor='w', pady=(0, 9))
+        ttk.Label(pane, text='Read a security report made by another tool. If you have never used ZAP, Nmap or Wireshark, try the fake report first. You do not need to find a file.', style='Muted.TLabel').pack(anchor='w', pady=(0, 9))
         ttk.Label(pane, text='Report format').pack(anchor='w')
         formats = ttk.Combobox(pane, textvariable=self.report_format, values=list(REPORT_FORMATS), state='readonly')
         formats.pack(fill='x', pady=(3, 7))
         self.controls.append(formats)
-        self.file_field(pane, 'Report file', self.report_path,
+        self.report_help = tk.StringVar()
+        ttk.Label(pane, textvariable=self.report_help, wraplength=610, justify='left', style='Muted.TLabel').pack(anchor='w', pady=(0, 5))
+        watch_variables(self, (self.report_format,), self.update_report_help)
+        self.update_report_help()
+        self.file_field(pane, 'Saved report from that tool', self.report_path,
                         lambda: [(self.report_format.get(), REPORT_FORMATS[self.report_format.get()][1]), ('All files', '*')])
-        self.action(pane, 'Summarize report', self.start_review)
+        buttons = ttk.Frame(pane)
+        buttons.pack(fill='x', pady=5)
+        self.action(buttons, 'Read my report', self.start_review)
+        self.action(buttons, 'Try fake ZAP report', self.show_zap_example)
         return self.output_box(pane)
+
+    def update_report_help(self, *_):
+        fmt = REPORT_FORMATS[self.report_format.get()][0]
+        self.report_help.set({
+            'zap': 'In OWASP ZAP, export a Traditional JSON report using its report generator. Choose that .json file here. Sentinel does not generate a ZAP scan yet.',
+            'zap-detail': 'Use the same ZAP Traditional JSON file. This option explains the individual warnings and suggested fixes.',
+            'nmap': 'Choose an XML report exported by Nmap, not a program installer or a screenshot.',
+            'wireshark': 'Choose a packet-list CSV exported from Wireshark, not a capture file (.pcap).'
+        }[fmt])
+
+    def show_zap_example(self):
+        if self.busy:
+            return
+        rows = zap_example()
+        self.show_output(self.report_output,
+                         'PRACTICE ONLY — FAKE REPORT\n\n'
+                         'Imagine another scanner found one possible problem on a pretend website.\n'
+                         'Warnings reported: ' + str(rows['Alert types reported']) +
+                         '\nRisk: Low\n\nSuggested action: Ask the website owner to check its browser protection settings.'
+                         '\n\nNo website was tested. Real ZAP reports may contain false alarms.')
+        self.status.set('Fake ZAP report read. No file needed.')
 
     def file_field(self, pane, label, variable, filetypes=lambda: [('All files', '*')]):
         ttk.Label(pane, text=label).pack(anchor='w')
