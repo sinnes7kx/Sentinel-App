@@ -39,7 +39,7 @@ class Page(HTMLParser):
             self.in_form = True
         elif tag in ('input', 'textarea', 'select') and self.in_form:
             name = attrs.get('name') or ''
-            if (attrs.get('type', '').lower() not in ('hidden', 'password', 'file', 'submit', 'button')
+            if ((attrs.get('type') or '').lower() not in ('hidden', 'password', 'file', 'submit', 'button')
                     and INPUT_NAME.fullmatch(name) and len(self.inputs) < 30):
                 self.inputs.add(name)
 
