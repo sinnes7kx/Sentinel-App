@@ -10,6 +10,14 @@ import json
 from .evidence import sanitize
 
 RISK_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4}
+PRIORITY = {
+    'critical': ('Review immediately', 'Potentially severe impact. Confirm the evidence promptly and involve the responsible owner.'),
+    'high': ('Review promptly', 'Potentially significant impact. Confirm the finding and prioritize an appropriate fix.'),
+    'medium': ('Plan a fix', 'Potential impact depends on the affected system and its use. Review context before scheduling remediation.'),
+    'low': ('Improve configuration', 'A lower reported risk or defense-in-depth improvement. Review during routine maintenance.'),
+    'info': ('Review context', 'An observation for awareness; it is not necessarily a vulnerability.'),
+    'unknown': ('Needs classification', 'No recognized risk rating. Review the evidence before assigning priority.'),
+}
 CONFIDENCE = {
     'high': 'Strong reported evidence; not proof of exploitability.',
     'medium': 'An observation that needs contextual review.',
@@ -46,6 +54,11 @@ def confidence_note(finding):
     return CONFIDENCE.get(confidence, CONFIDENCE['unknown'])
 
 
+def priority_note(finding):
+    """Display guidance from the reported rating, without rescoring evidence."""
+    return PRIORITY.get(finding.get('severity', '').lower(), PRIORITY['unknown'])
+
+
 def findings_summary(result):
     views = finding_views(result)
     counts = {risk: 0 for risk in (*RISK_ORDER, 'unknown')}
@@ -59,7 +72,9 @@ def findings_summary(result):
 
 def finding_detail(view):
     f = view.finding
+    priority, explanation = priority_note(f)
     return (f"{f['title']}\n\nRISK: {f['severity'].upper()}\n"
+            f"PRIORITY: {priority} — {explanation}\n"
             f"CONFIDENCE: {f.get('confidence', 'unknown')} — {confidence_note(f)}\n"
             f"SOURCE: {f.get('source', 'legacy')} | ID: {f['id']}\n"
             f"IDENTICAL OBSERVATIONS: {view.occurrences}\n\n"
