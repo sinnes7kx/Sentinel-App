@@ -13,7 +13,10 @@ class Fixture(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header('Content-Type','text/html')
         if self.path=='/fixed':
             self.send_header('X-Content-Type-Options','nosniff');self.send_header('Content-Security-Policy',"default-src 'self'; frame-ancestors 'none'")
-        self.send_header('Set-Cookie','private=super-secret-fixture');self.end_headers()
+        self.send_header('Set-Cookie','private=super-secret-fixture')
+        if self.path=='/cookies':
+            self.send_header('Set-Cookie','__Host-fixture-private=fixture-secret; Domain=example.test; Path=/; SameSite=unknown')
+        self.end_headers()
         self.wfile.write(b'<html>private-body-fixture</html>')
     def log_message(self,*args):pass
 
@@ -38,6 +41,12 @@ class TestEngine(unittest.TestCase):
         n=len(Fixture.hits);r=scan(self.base+'/redirect',True).to_dict();self.assertEqual(len(Fixture.hits),n+1);self.assertEqual(r['http_status'],302);self.assertIn('REDIRECT',[f['id'] for f in r['findings']]);self.assertNotIn('/outside',str(r))
     def test_fixed(self):
         ids={f.id for f in scan(self.base+'/fixed',True).findings};self.assertFalse({'CSP','NOSNIFF','FRAME'}&ids)
+    def test_cookie_review_single_request(self):
+        n=len(Fixture.hits);r=scan(self.base+'/cookies',True).to_dict()
+        self.assertEqual(len(Fixture.hits),n+1)
+        self.assertTrue({'COOKIE_HOST_PREFIX','COOKIE_INVALID_SAMESITE'} <= {f['id'] for f in r['findings']})
+        self.assertEqual(r['coverage']['cookie_ruleset'],'cookie-review-v1')
+        self.assertNotIn('fixture-private',str(r));self.assertNotIn('fixture-secret',str(r))
     def test_tls_header(self):
         t=Target.parse('https://example.test');self.assertIn('HSTS',[f.id for f in inspect_headers(t,200,[])])
         self.assertNotIn('HSTS',[f.id for f in inspect_headers(t,200,[('Strict-Transport-Security','max-age=31536000; includeSubDomains')])])
