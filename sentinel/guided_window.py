@@ -167,6 +167,8 @@ class GuidedWindow(tk.Toplevel):
                         variable=profile, value='Quick').pack(anchor='w')
         ttk.Radiobutton(panel, text='Standard — built-in checks plus modern TLS verification',
                         variable=profile, value='Standard').pack(anchor='w')
+        ttk.Radiobutton(panel, text='Extended — Standard plus cross-origin verification',
+                        variable=profile, value='Extended').pack(anchor='w')
         from .desktop_theme import detail_box
         area = detail_box(panel, height=10)
         area.configure(state='disabled')
