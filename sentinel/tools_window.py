@@ -84,6 +84,9 @@ class ToolsWindow(tk.Toplevel):
         ttk.Entry(check, textvariable=self.target).pack(fill='x', pady=(3, 6))
         self.profiles = ttk.Frame(check)
         self.profiles.pack(fill='x', pady=(1, 4))
+        self.profile_help = tk.StringVar()
+        ttk.Label(check, textvariable=self.profile_help, style='Muted.TLabel', wraplength=350,
+                  justify='left').pack(anchor='w', pady=(0, 2))
         ttk.Label(setup, text='2. Choose the setup', style='Title.TLabel').pack(anchor='w')
         self.engine_hint = tk.StringVar()
         ttk.Label(setup, textvariable=self.engine_hint, wraplength=350, justify='left',
@@ -120,9 +123,9 @@ class ToolsWindow(tk.Toplevel):
         self.preparation_status.pack(anchor='w', pady=4)
         ttk.Label(setup, textvariable=self.recommendation_text, wraplength=350, justify='left',
                   style='Muted.TLabel').pack(anchor='w', pady=(0, 2))
-        ttk.Separator(body).pack(fill='x', pady=4)
         conf = self.confirm_row = ttk.Frame(body)
-        conf.pack(fill='x', pady=(4, 0))
+        conf.pack(side='bottom', fill='x', pady=(4, 0), before=columns)
+        ttk.Separator(body).pack(side='bottom', fill='x', pady=4, before=columns)
         ttk.Checkbutton(conf, text='I have permission for this exact target and check (remembered until scope changes).',
                         variable=self.auth).pack(anchor='w', pady=(0, 4))
         confirm_line = ttk.Frame(conf)
@@ -168,6 +171,7 @@ class ToolsWindow(tk.Toplevel):
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
         watch_variables(self, (self.target,), self.target_changed_for_recommendation)
+        watch_variables(self, (self.profile,), self.update_profile_help)
         self.update_backend_controls()
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
 
@@ -381,6 +385,10 @@ class ToolsWindow(tk.Toplevel):
             availability = '\nUses the executable installed in the selected environment. WSL availability is checked before each assessment.'
         self.info.set(t.blurb + availability + (('\n' + t.note) if t.note else ''))
 
+    def update_profile_help(self, *_):
+        profile = self.tool.profiles.get(self.profile.get())
+        self.profile_help.set(profile.blurb if profile else '')
+
     def refresh_tool(self):
         t = self.tool
         self.update_tool_info()
@@ -389,8 +397,7 @@ class ToolsWindow(tk.Toplevel):
         first = next(iter(t.profiles)); self.profile.set(first)
         for p in t.profiles.values():
             ttk.Radiobutton(self.profiles, text=p.label, variable=self.profile, value=p.id).pack(anchor='w')
-            ttk.Label(self.profiles, text=p.blurb, style='Muted.TLabel', wraplength=325,
-                      justify='left').pack(anchor='w', padx=(20, 0), pady=(0, 2))
+        self.update_profile_help()
         self.say('Results appear here. Click a row for a plain-English explanation and how to fix it.')
 
     def start(self):
