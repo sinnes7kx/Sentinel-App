@@ -12,6 +12,7 @@ from .store import Store
 from .dnscheck import domain_name
 import json
 from .report import html_report
+from .finding_views import finding_views, finding_detail, findings_summary
 
 
 class DesktopUnavailable(RuntimeError):
@@ -273,19 +274,25 @@ class App(tk.Tk):
         connection = [coverage['tool']] if coverage.get('tool') else [
             f"HTTP {r['http_status']}" if r.get('http_status') else '', r.get('tls')]
         self.summary.set(' · '.join(filter(None, [r['status'].capitalize(), *connection])))
-        self.observation_count.set(str(len(r['findings'])))
-        for index, finding in enumerate(r['findings']):
+        views = finding_views(r)
+        self.presented_findings = {str(v.index): v for v in views}
+        self.observation_count.set(str(len(views)))
+        for v in views:
+            finding = v.finding
             severity = finding['severity']
-            self.findings.insert('', 'end', iid=str(index), values=(finding['title'], severity.upper()),
+            title = finding['title'] + (f' ({v.occurrences} identical observations)' if v.occurrences > 1 else '')
+            self.findings.insert('', 'end', iid=str(v.index), values=(title, severity.upper()),
                                  tags=(severity.lower(),))
-        self.set_detail(r['target']+'\n\nCoverage: '+json.dumps(r.get('coverage',{'profile':'legacy v0.1'}),ensure_ascii=False)+'\n\n'+(r['error'] or 'Select a finding for evidence and remediation. These are configuration observations, not verified exploits.'))
+        totals = findings_summary(r)
+        self.set_detail(r['target']+f"\n\n{totals['distinct']} distinct findings; {totals['observations']} observations; {totals['exact_repeats']} identical repeats.\n\nCoverage: "+json.dumps(r.get('coverage',{'profile':'legacy v0.1'}),ensure_ascii=False)+'\n\n'+(r['error'] or 'Select a finding for evidence and remediation. These are configuration observations, not verified exploits.'))
     def finding_selected(self,event=None):
         s=self.findings.selection()
-        if s and self.current:
-            f=self.current['findings'][int(s[0])]
+        if s and self.current and s[0] in getattr(self, 'presented_findings', {}):
+            view = self.presented_findings[s[0]]
+            f = view.finding
             self.selection_title.set(f['title'])
-            self.selection_meta.set(' · '.join(filter(None, [f['severity'].title(), f.get('source')])))
-            self.set_detail(f"{f['title']}\n\nOBSERVED EVIDENCE\n{f['evidence']}\n\nREMEDIATION\n{f['remediation']}")
+            self.selection_meta.set(' · '.join(filter(None, [f['severity'].title(), f.get('source'), 'Confidence: ' + f.get('confidence', 'unknown')])))
+            self.set_detail(finding_detail(view))
     def export(self):
         if not self.current:messagebox.showinfo('Export','Select an assessment first.');return
         p=filedialog.asksaveasfilename(defaultextension='.html',filetypes=[('HTML report','*.html')],initialfile='sentinel-report.html')
