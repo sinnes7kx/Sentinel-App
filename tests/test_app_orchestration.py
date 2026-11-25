@@ -52,6 +52,23 @@ class ApplicationTests(unittest.TestCase):
                     self.assertIn('New assessment', app.nav_buttons)
                     tools = app.open_network(); tools.withdraw()
                     self.assertIs(tools.orchestrator, app.orchestrator)
+                    with patch('sentinel.tool_setup_window.snapshot', return_value={
+                            'status': 'completed', 'rows': [{'name': 'Nmap (native)', 'state': 'Not detected',
+                                                            'detail': 'Fixture only', 'action': 'nmap'}]}):
+                        center = tools.open_tool_setup()
+                        deadline = time.monotonic() + 5
+                        while center.busy and time.monotonic() < deadline:
+                            app.update(); time.sleep(.01)
+                        self.assertFalse(center.busy)
+                        self.assertEqual(center.tree.item('0', 'values'), ('Nmap (native)', 'Not detected'))
+                        center.tree.selection_set('0')
+                        center.selected()
+                        self.assertEqual(center.detail.get(), 'Fixture only')
+                        with patch('sentinel.tool_setup_window.messagebox.askokcancel', return_value=False):
+                            center.prepare_selected()
+                        self.assertEqual(center.choice.get(), 'nmap')
+                        self.assertFalse(center.busy)
+                        center.destroy()
                     self.assertEqual(tools.tabs.select(), str(tools.setup_page))
                     tools.tabs.select(tools.results_page)
                     self.assertEqual(tools.tabs.select(), str(tools.results_page))
