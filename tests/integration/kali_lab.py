@@ -51,12 +51,17 @@ def main():
             docker('run', '-d', '--name', name, '--pull=never', '--network=none',
                    '--cap-drop=ALL', '--security-opt=no-new-privileges', '--read-only',
                    '--memory=256m', '--cpus=1', '--pids-limit=64',
+                   '--user', f'{os.getuid()}:{os.getgid()}',
                    '--mount', f'type=bind,source={path},target=/fixture,readonly',
                    '--entrypoint', 'python3', fixture_id, '/fixture/server.py')
             deadline = time.monotonic() + 20
-            while 'SENTINEL_FIXTURE_READY' not in docker('logs', name):
-                if time.monotonic() >= deadline:
-                    raise RuntimeError('Fixture did not become ready.')
+            while True:
+                logs = docker('logs', name)
+                if 'SENTINEL_FIXTURE_READY' in logs:
+                    break
+                state = docker('inspect', '--format', '{{.State.Status}}', name)
+                if state != 'running' or time.monotonic() >= deadline:
+                    raise RuntimeError(f'Fixture did not become ready (state={state}): {logs[-4000:]}')
                 time.sleep(.2)
             if docker('inspect', '--format', '{{.HostConfig.NetworkMode}}', name) != 'none':
                 raise RuntimeError('Fixture network is not disabled.')
@@ -77,7 +82,7 @@ def main():
                              True, backend=backend, run=isolated)
             if result.status != 'completed' or not any(
                     f.id == 'WHATWEB_HTTPServer' for f in result.findings):
-                raise AssertionError('WhatWeb did not return the expected real technology evidence: ' + result.status)
+                raise AssertionError('WhatWeb did not return the expected real technology evidence: ' + result.status + ' ' + result.error)
             redirect = execute(whatweb.SPEC, 'http://127.0.0.1:8080/redirect',
                                'passive', True, backend=backend, run=isolated)
             if redirect.status != 'completed':
@@ -89,7 +94,7 @@ def main():
                           True, backend=backend, run=isolated)
             ids = {f.id for f in tls.findings}
             if tls.status != 'completed' or not {'CERT_SELF_SIGNED', 'TLS_NO_13'} <= ids:
-                raise AssertionError('sslscan did not return expected fixture evidence: ' + tls.status + ' ' + str(sorted(ids)))
+                raise AssertionError('sslscan did not return expected fixture evidence: ' + tls.status + ' ' + tls.error + ' ' + str(sorted(ids)))
             if 'TLS_NO_MODERN' in ids or 'TLS_1.0' in ids or 'TLS_1.1' in ids:
                 raise AssertionError('False TLS protocol finding.')
             print('PASS: WhatWeb technology evidence, redirect restriction and sslscan TLS fixture.')
