@@ -11,7 +11,7 @@ from .scope import require_authorization
 from .backends import Backend
 
 
-def managed_candidate(spec, target, scope, saved):
+def managed_candidate(spec, scope, saved):
     if (saved is None or saved.kind != 'docker' or
             not re.fullmatch(r'sha256:[0-9a-f]{64}', saved.environment)):
         return None
@@ -76,12 +76,13 @@ class Suite:
             if spec.schemes == ('https',) and target.scheme != 'https':
                 coverage[spec.id] = 'skipped (needs https://)'; continue
             binary = lookup(spec)
-            selected = Backend() if binary else managed_candidate(spec, target, scope, managed)
+            selected = Backend() if binary else managed_candidate(spec, scope, managed)
             if selected is None:
                 coverage[spec.id] = 'not installed'; status = 'partial'
                 if spec.id == 'nikto':
                     errors.append('Nikto is not installed natively; automatic Nikto setup is not available yet.')
                 elif managed is not None:
+                    coverage[spec.id] = 'not run (managed toolkit incompatible with target)'
                     errors.append(spec.name + ': saved toolkit cannot be used for this target; use a supported native check.')
                 else:
                     errors.append(spec.name + ': no native executable or approved managed toolkit. Open Tool setup and prepare/test the toolkit.')
@@ -94,10 +95,17 @@ class Suite:
             except (ValueError, ToolMissing) as e:
                 coverage[spec.id] = 'not run'; status = 'partial'; errors.append(str(e)); continue
             coverage[spec.id] = r.status
+            if selected.kind == 'docker':
+                coverage[spec.id + '_cleanup'] = r.coverage.get('container_cleanup', 'unverified')
+                coverage[spec.id + '_scope'] = r.coverage.get('scope_note', 'Exact authorized IP URL; not an egress sandbox.')
             kept = [f for f in r.findings if not (spec.id == 'nikto' and any(h in (f.title + f.evidence).lower() for h in HEADER_DUPES))]
             if len(kept) != len(r.findings):
                 coverage['duplicates hidden'] = coverage.get('duplicates hidden', 0) + len(r.findings) - len(kept)
             findings += kept
+            if selected.kind == 'docker' and r.coverage.get('container_cleanup') != 'Container absent at verification':
+                status = 'cancelled' if r.status == 'cancelled' else 'partial'
+                errors.append(spec.name + ': container cleanup not verified; further checks stopped.')
+                break
             if r.status == 'cancelled':
                 status = 'cancelled'; break
             if r.status != 'completed':
