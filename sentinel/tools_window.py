@@ -96,6 +96,9 @@ class ToolsWindow(tk.Toplevel):
         self.detect_wsl_button.pack(side='left')
         self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
+        if os.name == 'nt':
+            ttk.Button(body, text='Install / prepare security tools', command=self.open_tool_setup,
+                       style='Primary.TButton').pack(anchor='w', pady=(4, 6))
         self.saved_toolkit_button = ttk.Button(body, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
         if self.bundled:
             self.saved_toolkit_button.pack(anchor='w', pady=(2, 4))
@@ -193,6 +196,16 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_status.set('')
         self.update_tool_info()
         self.update_backend_controls()
+
+    def open_tool_setup(self):
+        from .tool_setup_window import ToolSetupWindow
+        window = self.children.get('tool_setup')
+        if window is None:
+            window = ToolSetupWindow(self)
+        else:
+            window.deiconify()
+            window.lift()
+        return window
 
     def use_saved_toolkit(self):
         if self.busy or self.wsl_busy or not self.bundled or self.tool.id not in bundle.BUNDLED_TOOLS:
@@ -334,7 +347,11 @@ class ToolsWindow(tk.Toplevel):
                 if not messagebox.askokcancel('WSL execution', 'WSL execution is experimental. Stop ends the Windows launcher, but Linux work may continue until its profile time limit. Use native or Docker for stronger cancellation. Continue?', parent=self): return
             name = self.app.project.get(); pid = self.app.store.project(name)
         except ToolMissing as e:
-            messagebox.showinfo('Tool needed', str(e), parent=self); return
+            if os.name == 'nt' and self.tool.id == 'nmap':
+                self.open_tool_setup()
+            else:
+                messagebox.showinfo('Tool needed', str(e), parent=self)
+            return
         except (ValueError, PermissionError) as e:
             messagebox.showerror('Cannot start', str(e), parent=self); return
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
