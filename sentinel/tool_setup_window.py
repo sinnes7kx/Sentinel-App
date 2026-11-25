@@ -55,9 +55,9 @@ class ToolSetupWindow(tk.Toplevel):
         self.tree.bind('<<TreeviewSelect>>', self.selected)
         self.detail = tk.StringVar(value='Refresh to inspect the local environment.')
         ttk.Label(inventory_page, textvariable=self.detail, wraplength=680, justify='left',
-                  style='Muted.TLabel').pack(anchor='w', pady=6)
+                  style='Muted.TLabel').pack(side='bottom', fill='x', pady=4, before=table)
         controls = ttk.Frame(inventory_page)
-        controls.pack(fill='x')
+        controls.pack(side='bottom', fill='x', before=table)
         self.refresh_button = ttk.Button(controls, text='Refresh status', command=self.refresh)
         self.refresh_button.pack(side='left')
         self.test_button = ttk.Button(controls, text='Test toolkit', command=self.test_installation)
@@ -73,14 +73,14 @@ class ToolSetupWindow(tk.Toplevel):
         self.options = []
         choices = ttk.Frame(install_page)
         choices.pack(fill='x')
-        for label, value in (('Recommended — Nmap and Kali toolkit', 'all'),
-                             ('Nmap — native Windows', 'nmap'),
-                             ('Docker Desktop — Linux runtime', 'docker'),
-                             ('Kali toolkit — WhatWeb and sslscan via Docker', 'toolkit'),
-                             ('ZAP — optional web security engine (larger download)', 'zap'),
-                             ('Check for ZAP updates', 'zap-update')):
+        for i, (label, value) in enumerate((('Recommended: Nmap + toolkit', 'all'),
+                             ('Nmap for Windows', 'nmap'),
+                             ('Docker Desktop', 'docker'),
+                             ('Toolkit: WhatWeb + sslscan', 'toolkit'),
+                             ('ZAP (larger download)', 'zap'),
+                             ('Check for ZAP updates', 'zap-update'))):
             radio = ttk.Radiobutton(choices, text=label, value=value, variable=self.choice)
-            radio.pack(anchor='w', pady=1)
+            radio.grid(row=i // 2, column=i % 2, sticky='w', padx=(0, 12), pady=2)
             self.options.append(radio)
         ttk.Label(install_page, text='Internet access may be needed. Windows, Npcap and Docker may show administrator, license or restart prompts. Sentinel will not accept terms for you.',
                   style='Muted.TLabel', wraplength=680).pack(anchor='w', pady=5)
