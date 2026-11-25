@@ -1,4 +1,4 @@
-from .ui_lifecycle import watch_poll, watch_variables
+from .ui_lifecycle import watch_poll, watch_variables, watch_authorized_scope
 from .desktop_theme import SEVERITY_COLORS, configure_theme, detail_box, scrollable
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -89,7 +89,7 @@ class App(tk.Tk):
         self.run_btn.grid(row=1, column=3, sticky='ew', padx=(0, 6), pady=(3, 0))
         self.stop_btn = ttk.Button(form, text='Stop', command=self.stop, state='disabled')
         self.stop_btn.grid(row=1, column=4, sticky='ew', pady=(3, 0))
-        self.auth_check = ttk.Checkbutton(form, text='I have explicit permission to assess this URL and any DNS domain entered.',
+        self.auth_check = ttk.Checkbutton(form, text='I have permission for this URL, DNS domain and profile (remembered until scope changes).',
                                           variable=self.auth)
         self.auth_check.grid(row=2, column=0, columnspan=5, sticky='w', pady=(8, 0))
         ttk.Label(form, text='Assessment depth', style='Muted.TLabel').grid(row=3, column=0, sticky='w', pady=(6, 0))
@@ -97,7 +97,7 @@ class App(tk.Tk):
                      width=12, state='readonly').grid(row=3, column=1, sticky='w', pady=(6, 0))
         ttk.Label(form, text='Standard adds same-endpoint TLS 1.2/1.3 verification.', style='Muted.TLabel').grid(
             row=3, column=2, columnspan=3, sticky='w', pady=(6, 0))
-        watch_variables(self, (self.url, self.dns, self.assessment_profile), lambda *_: self.auth.set(False))
+        watch_authorized_scope(self, (self.project, self.url, self.dns, self.assessment_profile), self.auth)
 
     def build_overview(self, parent):
         overview = ttk.Frame(parent, style='Canvas.TFrame')
@@ -215,7 +215,7 @@ class App(tk.Tk):
         except (ValueError,PermissionError) as e:messagebox.showerror('Cannot start',str(e));return
         self.progress.configure(mode='indeterminate')
         self.progress.start(18)
-        self.busy=True; self.cancel_event=Event(); self.stop_btn.configure(state='normal'); self.run_btn.configure(state='disabled'); self.status.set('Assessing authorized URL…'); self.auth.set(False)
+        self.busy=True; self.cancel_event=Event(); self.stop_btn.configure(state='normal'); self.run_btn.configure(state='disabled'); self.status.set('Assessing authorized URL…')
         cancel, queue = self.cancel_event, self.queue
         try:
             self.job = self.orchestrator.submit(
