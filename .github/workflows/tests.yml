@@ -67,3 +67,8 @@ jobs:
           EOF
       - name: Run real WhatWeb and sslscan against isolated loopback fixtures
         run: python tests/integration/kali_lab.py
+
+      - name: Prepare upstream ZAP image for isolated fixture test
+        run: docker --host unix:///var/run/docker.sock pull ghcr.io/zaproxy/zaproxy:stable
+      - name: Run real ZAP passive baseline against isolated synthetic fixture
+        run: python tests/integration/zap_lab.py
