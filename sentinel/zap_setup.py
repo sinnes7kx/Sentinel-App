@@ -16,7 +16,7 @@ def _ok(result):
             not result.timed_out and not result.truncated)
 
 
-def prepare_zap(prefix, cancel, invoke=run):
+def prepare_zap(prefix, cancel, invoke=run, refresh=False):
     def outcome(status, message, **extra):
         return {'status': status, 'message': message, **extra}
 
@@ -35,8 +35,9 @@ def prepare_zap(prefix, cancel, invoke=run):
 
     if cancel.is_set():
         return outcome('cancelled', 'ZAP preparation cancelled.')
-    image = inspect()
-    if not image and not cancel.is_set():
+    previous = inspect()
+    image = previous
+    if (refresh or not image) and not cancel.is_set():
         pulled = invoke(prefix + ['pull', ZAP_IMAGE], 1200, cancel)
         if not _ok(pulled):
             return outcome('cancelled' if cancel.is_set() else 'partial',
@@ -62,6 +63,12 @@ def prepare_zap(prefix, cancel, invoke=run):
     version = VERSION.search(result.stdout) if _ok(result) else None
     if not version:
         return outcome('partial', 'ZAP image detected but its offline version check did not complete.')
-    return outcome('completed', 'ZAP ' + version.group(1) +
-                   ' prepared. Offline version check passed; desktop scanning is not enabled.',
+    if refresh:
+        change = 'Image changed.' if previous and previous != image else (
+            'Image unchanged.' if previous == image else 'Image downloaded.')
+        message = 'ZAP ' + version.group(1) + ' checked against upstream stable. ' + change
+    else:
+        message = 'ZAP ' + version.group(1) + ' prepared.'
+    return outcome('completed', message +
+                   ' Offline version check passed; desktop scanning is not enabled.',
                    zap_image=image, zap_version=version.group(1))
