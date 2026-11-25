@@ -1,6 +1,7 @@
 """Beginner entry point; routes to existing, authorized workflows."""
 import tkinter as tk
 from tkinter import ttk
+from .assessment_plan import website_plan
 from .readiness import Readiness, inventory
 from .runtime_health import diagnostics
 from .orchestration import for_app
@@ -27,8 +28,8 @@ class GuidedWindow(tk.Toplevel):
         ttk.Label(body, text='What would you like to secure?',
                   style='Title.TLabel').pack(anchor='w', pady=(0, 8))
         choices = (
-            ('Website: quick security check',
-             'Check HTTPS, headers and cookies on one authorized URL.',
+            ('Website: guided assessment',
+             'Preview checks, suggested engines and coverage before continuing.',
              self.website),
             ('Website or network: security tools',
              'Choose an existing tool and review its scope, profile and execution environment.',
@@ -142,10 +143,67 @@ class GuidedWindow(tk.Toplevel):
             self.detail.set(self.rows[int(selected[0])].explanation)
 
     def website(self):
-        # Return to the existing single-URL workflow; do not initiate a scan.
-        self.app.auth.set(False)
-        self.destroy()
-        self.app.lift()
+        if self.health_busy:
+            self.health_status.set('Finish or cancel engine diagnostics before opening a plan.')
+            return
+        existing = self.children.get('website_plan')
+        if existing is not None:
+            existing.lift()
+            return
+        window = tk.Toplevel(self, name='website_plan')
+        window.title('Sentinel | Review website assessment')
+        window.geometry('680x560')
+        window.minsize(560, 440)
+        panel = ttk.Frame(window, padding=16)
+        panel.pack(fill='both', expand=True)
+        target = tk.StringVar(value=self.app.url.get())
+        profile = tk.StringVar(value='Quick')
+        ttk.Label(panel, text='Website address', style='Title.TLabel').pack(anchor='w')
+        ttk.Entry(panel, textvariable=target).pack(fill='x', pady=5)
+        ttk.Label(panel, text='Assessment depth').pack(anchor='w')
+        ttk.Radiobutton(panel, text='Quick — built-in configuration checks',
+                        variable=profile, value='Quick').pack(anchor='w')
+        ttk.Radiobutton(panel, text='Standard — plan additional checks for manual review',
+                        variable=profile, value='Standard').pack(anchor='w')
+        area = tk.Text(panel, height=14, wrap='word', state='disabled')
+        area.pack(fill='both', expand=True, pady=8)
+        approved_plan = None
+
+        def preview(*_):
+            nonlocal approved_plan
+            approved_plan = None
+            try:
+                plan = website_plan(target.get(), profile.get(), self.rows)
+                lines = [plan.target, plan.profile + ' assessment preview', '']
+                for step in plan.steps:
+                    lines.extend([step.title + ' — ' + step.engine, step.coverage, step.note, ''])
+                lines.extend(['Coverage and limitations:', *('- ' + n for n in plan.limitations)])
+                approved_plan = plan
+                message = '\n'.join(lines)
+            except ValueError:
+                message = 'Enter a complete HTTP or HTTPS URL without credentials or query parameters.'
+            area.configure(state='normal')
+            area.delete('1.0', 'end')
+            area.insert('1.0', message)
+            area.configure(state='disabled')
+            proceed.configure(state='normal' if approved_plan else 'disabled')
+
+        def continue_quick():
+            if approved_plan is None:
+                return
+            self.app.url.set(approved_plan.target)
+            self.app.dns.set('')
+            self.app.auth.set(False)
+            self.destroy()
+            self.app.lift()
+
+        proceed = ttk.Button(panel, text='Continue to quick check', command=continue_quick)
+        proceed.pack(anchor='w')
+        ttk.Label(panel, text='No assessment starts here. Confirm permission in the main window.',
+                  wraplength=500).pack(anchor='w', pady=4)
+        from .ui_lifecycle import watch_variables
+        watch_variables(window, (target, profile), preview)
+        preview()
 
     def tools(self):
         self.destroy()
