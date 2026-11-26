@@ -7,6 +7,7 @@ output, and return an ordinary sentinel.engine.Scan.
 """
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 import os
 import shutil
@@ -56,7 +57,26 @@ class ToolSpec:
         return execute(self, value, profile, attested, confirm, cancel, **kw)
 
 
+NATIVE_TOOLS = Path(__file__).resolve().parents[2] / 'native-tools'
+
+
+def bundled_binary(tool):
+    if os.name == 'nt':
+        if tool == 'sslscan':
+            exe = NATIVE_TOOLS / 'sslscan/sslscan.exe'
+        elif tool == 'whatweb' and (NATIVE_TOOLS / 'whatweb/whatweb').is_file() and (NATIVE_TOOLS / 'launch-whatweb.rb').is_file():
+            exe = NATIVE_TOOLS / 'ruby/bin/ruby.exe'
+        else:
+            return None
+        if exe.is_file():
+            return str(exe)
+    return None
+
+
 def find_binary(spec):
+    packaged = bundled_binary(spec.id)
+    if packaged:
+        return packaged
     for name in spec.binaries:
         found = shutil.which(name)
         if found:

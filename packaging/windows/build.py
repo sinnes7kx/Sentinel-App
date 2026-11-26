@@ -1,6 +1,5 @@
-"""Build the x64 offline installer on Linux with Docker, NSIS and Python 3.12+."""
+"""Build the x64 offline installer on Linux with NSIS, 7-Zip, RubyGems and Python 3.12+."""
 import argparse
-import gzip
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,15 +12,26 @@ from zipfile import ZipFile
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
-from sentinel.tools.bundle import file_digest, WSL_MSI_SHA256
+from sentinel.tools.bundle import file_digest
 
 SOURCES = {
     'python.tgz': (
         'https://github.com/astral-sh/python-build-standalone/releases/download/20261124/'
         'cpython-3.13.18%2B20261124-x86_64-pc-windows-msvc-install_only.tar.gz',
         '9c22438c8f107dc88505394a87a61aab3504d33d1ce4e22eb177381e5e9b244f'),
-    'wsl-x64.msi': ('https://github.com/microsoft/WSL/releases/download/3.0.5/wsl.3.0.5.0.x64.msi',
-                    WSL_MSI_SHA256),
+    'sslscan.zip': ('https://github.com/rbsec/sslscan/releases/download/2.2.4/sslscan-2.2.4.zip',
+                    '6e803b87c84835916868c414aa6c1f0e5b85a554b37ab35c1a91a7df605cbe05'),
+    'sslscan-license.txt': ('https://raw.githubusercontent.com/rbsec/sslscan/2.2.4/LICENSE',
+                            '8c75a9231db8906865e29706ed63aad18fd918c92c15dbefbb13c25fe42850b4'),
+    'ruby33.7z': ('https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.14-1/'
+                  'rubyinstaller-3.3.14-1-x64.7z',
+                  '03b6ed68fba9e632f0f6e93af99c1bc55315e1bfad0296a105268296cbcdb8ba'),
+    'whatweb.tgz': ('https://codeload.github.com/urbanadventurer/WhatWeb/tar.gz/refs/tags/v0.6.4',
+                    '611cde154ad864ffc430ac34e87ca746dbe0f0cc47a116ba06de3cb61e923b15'),
+    'addressable-2.8.8.gem': ('https://rubygems.org/downloads/addressable-2.8.8.gem',
+                              '7c13b8f9536cf6364c03b9d417c19986019e28f7c00ac8132da4eb0fe393b057'),
+    'public_suffix-6.0.2.gem': ('https://rubygems.org/downloads/public_suffix-6.0.2.gem',
+                                'bfa7cd5108066f8c9602e0d6d4114999a5df5839a63149d3e8b0f9c1d3558394'),
     'packaging.whl': ('https://files.pythonhosted.org/packages/ba/7b/5504f91c9c2733f693d7759e50ede5d27119d4da7e5836c46d3b5ff81d56/packaging-26.4-py3-none-any.whl',
                       '81383611a09c1bc0b08b76e0fd5829d7c6824c65b27a6aee339da133f4233ea2'),
     'dnspython.whl': ('https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl',
@@ -43,10 +53,6 @@ def fetch(cache):
 
 def stage_payload(stage, cache):
     fetch(cache)
-    toolkit = stage / 'toolkit'
-    toolkit.mkdir()
-    shutil.copy(cache / 'wsl-x64.msi', toolkit)
-    shutil.copy(HERE / 'enable-wsl.ps1', toolkit)
     with tarfile.open(cache / 'python.tgz') as source:
         source.extractall(stage, members=(m for m in source if not m.name.endswith(('.pdb', '.pyc'))),
                           filter='data')
@@ -57,21 +63,22 @@ def stage_payload(stage, cache):
     for name in ('run.py', 'README.md', 'demo_site.py'):
         shutil.copy(ROOT / name, stage)
     shutil.copytree(ROOT / 'sentinel', stage / 'sentinel', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-    subprocess.run(['docker', 'build', '--platform', 'linux/amd64', '-t', 'sentinel-tools-build', str(HERE)], check=True)
-    container = subprocess.check_output(['docker', 'create', 'sentinel-tools-build'], text=True).strip()
-    archive = toolkit / 'kali-tools.tar.gz'
-    try:
-        with subprocess.Popen(['docker', 'export', container], stdout=subprocess.PIPE) as process:
-            with gzip.open(archive, 'wb', compresslevel=4) as stream:
-                shutil.copyfileobj(process.stdout, stream)
-            if process.wait():
-                raise RuntimeError('Docker filesystem export failed.')
-    finally:
-        subprocess.run(['docker', 'rm', container], check=True)
-    (toolkit / 'rootfs.sha256').write_text(file_digest(archive) + '\n', encoding='ascii')
-    packages = subprocess.check_output(['docker', 'run', '--rm', 'sentinel-tools-build', 'dpkg-query',
-                                        '-W', '-f', '${Package}\t${Version}\n'])
-    (toolkit / 'kali-packages.tsv').write_bytes(packages)
+    native = stage / 'native-tools'
+    native.mkdir()
+    with ZipFile(cache / 'sslscan.zip') as archive:
+        archive.extractall(native / 'sslscan')
+    shutil.copy(cache / 'sslscan-license.txt', native / 'sslscan/LICENSE')
+    with tarfile.open(cache / 'whatweb.tgz') as archive:
+        archive.extractall(native, filter='data')
+    (native / 'WhatWeb-0.6.4').rename(native / 'whatweb')
+    shutil.copy(HERE / 'launch-whatweb.rb', native)
+    subprocess.run(['7z', 'x', '-bd', '-o' + str(native), str(cache / 'ruby33.7z')], check=True,
+                   stdout=subprocess.DEVNULL)
+    (native / 'rubyinstaller-3.3.14-1-x64').rename(native / 'ruby')
+    gems = native / 'ruby/lib/ruby/gems/3.3.0'
+    subprocess.run(['gem', 'install', '--local', '--no-document', '--ignore-dependencies',
+                    '--install-dir', str(gems), str(cache / 'public_suffix-6.0.2.gem'),
+                    str(cache / 'addressable-2.8.8.gem')], check=True)
 
 
 def build(stage, output):

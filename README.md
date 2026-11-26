@@ -2,15 +2,19 @@
 
 ## Windows offline installer (x64)
 
-Run `Sentinel-Windows-x64.exe`, then open **Sentinel** from Start. The installer includes Python/Tk, the dependency and DNS libraries, Microsoft WSL, and a Kali filesystem containing **WhatWeb** and **sslscan**. The four summary cards and three-pane desktop show findings, actions, evidence and project history from your local assessments.
+Run the Windows x64 installer and open **Sentinel** from Start. **Security tools** defaults to **native**. WhatWeb runs under the included Windows Ruby runtime and sslscan runs as a Windows executable. Choose a check, enter your authorized URL and select **Start**. Both tools are ready after installation, including on machines without Kali, WSL, Docker, Python or Ruby. Nmap and Nikto remain separate integrations.
 
-Open **Security tools**, choose **wsl** or **docker**, then **Prepare included tools**. Setup checks the local archive, registers it and remembers the verified environment. WhatWeb connects directly to the approved IP in WSL and Docker. Choose WhatWeb for an authorized IP URL or sslscan for a TLS endpoint. Choose a profile, confirm scope and select **Start**.
+The installer writes application files under `%LOCALAPPDATA%\Programs\Sentinel` and user data under `%LOCALAPPDATA%\Sentinel`. Upgrades default to native tools. Existing WSL distributions and Docker images are still available through their respective backends.
 
-- **WSL 2** is the bundled path for x64 Windows 11 with hardware virtualization enabled. Initial setup can request Windows administrator approval for Virtual Machine Platform and the signed Microsoft WSL installer. If Windows requests a reboot, restart and select **Prepare included tools** again.
-- **Docker** uses a running Linux-container engine on the same computer. Sentinel imports the included archive and runs its immutable local image ID. The Windows installer includes WSL for computers without a Docker engine.
-- **Tool coverage** includes WhatWeb technology identification and sslscan protocol, cipher and certificate inspection. Nmap and Nikto remain separate integrations. Use an endpoint reachable from the selected runtime. Loopback in a container refers to that container.
-- **Storage** is per user. The app lives under `%LOCALAPPDATA%\Programs\Sentinel`. Windows Settings can uninstall the desktop files. Assessment history and prepared WSL distributions or Docker images persist separately. The environment name or image ID appears in Security tools.
-- **Build** on x64 Linux with Python 3.12+, Docker and NSIS 3.11+: `python3 packaging/windows/build.py dist/Sentinel-Windows-x64.exe`. Network access is used on the build machine. The Kali base is digest-pinned and apt verifies the rolling package index. The resulting installer includes the installed Debian package versions and archive checksum.
+Build on x64 Linux with Python 3.12+, RubyGems, 7-Zip and NSIS 3.11+ using `python3 packaging/windows/build.py dist/Sentinel-Windows-x64.exe`. The build downloads hash-pinned upstream files. The packaged application uses only local runtimes.
+
+## Check IDOR / BOLA evidence
+
+Open **Security tools → IDOR / BOLA**. Select **Save example…** to get an editable JSON file. Replace the sample records with your application’s object-read policy and recorded responses, choose the file and select **Check object access**. This offline check covers read access. It sends no API requests.
+
+- `readers` maps each object ID to its complete list of authorized subject IDs, including grants through roles or sharing. Use tenant-qualified, pseudonymous IDs where needed.
+- Each case records the authenticated `subject`, requested `object`, `http_status` and `returned_objects`. List all object IDs actually disclosed in the response. Use an empty list for verified absence and `null` when response evidence is unavailable.
+- A restricted object in a response is flagged even when the status is 403 or the response also contains permitted objects. Missing evidence and ambiguous outcomes are inconclusive. Include both a permitted and a denied read to exercise both decisions. Conclusions apply to the supplied policy and evidence.
 
 ## Start Sentinel from source
 
@@ -18,7 +22,7 @@ On Windows, double-click `Start_Sentinel.bat` to open the desktop app. The comma
 
 The desktop workspace puts project history, findings, and evidence side by side. It also provides assessment comparison, HTML and JSON exports, dependency advisory checks, and existing external-tool configuration.
 
-Open **Local utilities** for two offline workflows:
+Open **Local utilities** for offline workflows:
 
 - **File integrity** streams a selected file and returns its SHA-256 and SHA-512 digests. Paste a trusted reference digest to see whether it matches.
 - **Tool report review** summarizes saved ZAP JSON, Nmap XML, and Wireshark packet-list CSV files up to 5 MB.
@@ -50,7 +54,7 @@ Run `py -3 run.py --desktop` on Windows or `python3 run.py --desktop` on Kali to
 
 The Tkinter interface now shares one bounded background worker across website, external-tool and local dependency checks. Stop/cancel, timestamped progress events, redacted evidence, source/confidence fields and SQLite history are shared. Existing projects and adapters remain available.
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution model, scope boundaries, backend setup and verification limits. Source checkouts default to the native backend. The offline installer opens Security tools with the bundled WSL option. Custom WSL/Docker environments must already contain the selected tool. WSL cancellation is experimental and may leave Linux work running until the profile timeout. Docker images must be locally available and selected by immutable ID or registry digest.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution model, scope boundaries, backend setup and verification limits. Source checkouts default to the native backend. The offline installer opens Security tools with the native Windows option. Custom WSL/Docker environments must already contain the selected tool. WSL cancellation is experimental and may leave Linux work running until the profile timeout. Docker images must be locally available and selected by immutable ID or registry digest.
 
 ### Connect a separately managed Kali distribution
 
@@ -58,7 +62,7 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md) for the repository review, execution mod
 2. In Sentinel, open **Security tools**, set **Run using** to **wsl**, and click **Detect distributions**. Sentinel prefers `kali-linux` when no listed distribution is already selected. You can also enter the exact name of a custom distribution.
 3. Use **Check installed tools** to see whether Nmap, sslscan, WhatWeb, and their GNU `timeout` dependency are available. Choose a supported tool and use its normal profile and authorization controls.
 
-For a full website URL, the main window's **Run assessment** checks headers and TLS with built-in Python code. In **Security tools**, sslscan accepts an HTTPS URL. The Nmap adapter expects a host name, IP address, or permitted private CIDR. Detecting a distribution confirms its registration. **Check installed tools** lists its binaries. The offline installer includes WhatWeb and sslscan, and its **Prepare included tools** action selects the imported environment.
+For a full website URL, the main window's **Run assessment** checks headers and TLS with built-in Python code. In **Security tools**, sslscan accepts an HTTPS URL. The Nmap adapter expects a host name, IP address, or permitted private CIDR. Detecting a distribution confirms its registration. **Check installed tools** lists its binaries. The offline installer runs WhatWeb and sslscan directly on Windows.
 
 The binaries run inside Kali under the distribution's configured user. Package installation is handled within Kali. Use an authorized address reachable from the distribution. A loopback address in Kali may refer to a different machine context from Windows loopback.
 

@@ -1,4 +1,5 @@
 """Summarize existing tool exports without launching tools or retaining files."""
+from .bola import assess_reads
 from collections import Counter
 import csv
 import io
@@ -62,7 +63,7 @@ def wireshark(text):
 
 
 def summarize(tool, raw):
-    parser = {'zap': zap, 'nmap': nmap, 'wireshark': wireshark}.get(tool)
+    parser = {'zap': zap, 'nmap': nmap, 'wireshark': wireshark, 'bola': assess_reads}.get(tool)
     if parser is None:
         raise ValueError('Choose a supported report format.')
     try:

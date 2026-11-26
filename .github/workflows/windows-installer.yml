@@ -1,0 +1,49 @@
+name: Windows offline installer
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packaging/windows/**'
+      - 'sentinel/**'
+      - '.github/workflows/windows-installer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    timeout-minutes: 15
+    steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 ruby-rubygems nsis 7zip
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 packaging/windows/build.py dist/Sentinel-Windows-x64.exe
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Sentinel-Windows-x64
+          path: dist/Sentinel-Windows-x64.exe
+          compression-level: 0
+          retention-days: 7
+
+  installed-desktop:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: Sentinel-Windows-x64
+          path: dist
+      - name: Install and run desktop checks
+        shell: pwsh
+        run: |
+          $setup = Start-Process -FilePath 'dist/Sentinel-Windows-x64.exe' -ArgumentList '/S' -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Installer exit code $($setup.ExitCode)" }
+          & "$env:LOCALAPPDATA/Programs/Sentinel/python/python.exe" -I -B packaging/windows/smoke.py
+          exit $LASTEXITCODE

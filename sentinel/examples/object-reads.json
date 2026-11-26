@@ -1,0 +1,11 @@
+{
+  "schema": "sentinel-object-reads-v1",
+  "readers": {
+    "demo/invoice-1": ["demo/user-a"],
+    "demo/invoice-2": ["demo/user-b"]
+  },
+  "cases": [
+    {"subject": "demo/user-a", "object": "demo/invoice-1", "http_status": 200, "returned_objects": ["demo/invoice-1"]},
+    {"subject": "demo/user-b", "object": "demo/invoice-1", "http_status": 403, "returned_objects": []}
+  ]
+}

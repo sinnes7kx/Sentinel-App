@@ -7,7 +7,7 @@ from threading import Event
 from .orchestration import for_app
 from queue import Queue, Empty
 from .tools import TOOLS
-from .tools.base import ToolMissing, parse_input
+from .tools.base import ToolMissing, bundled_binary, parse_input
 from .tools.runner import clean
 from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
 from .tools import bundle, wsl
@@ -32,7 +32,10 @@ class ToolsWindow(tk.Toplevel):
         self.environment_values = {'wsl': '', 'docker': ''}
         self.active_backend = 'native'
         self.bundled = os.name == 'nt' and (bundle.PAYLOAD / 'rootfs.sha256').is_file()
-        if self.bundled:
+        if bundled_binary('whatweb'):
+            self.tool = next(tool for tool in TOOLS if tool.id == 'whatweb')
+            self.tool_name.set(self.tool.name)
+        elif self.bundled:
             preferred = bundle.saved_backend()
             self.backend.set(preferred.kind)
             self.active_backend = preferred.kind
@@ -49,7 +52,10 @@ class ToolsWindow(tk.Toplevel):
         ttk.Label(self, textvariable=self.status, style='Canvas.TLabel', wraplength=740).pack(
             side='bottom', fill='x', padx=16, pady=(0, 8))
         body = ttk.Frame(self, padding=16); body.pack(fill='both', expand=True, padx=16, pady=16)
-        ttk.Label(body, text='Choose a check', font=('Segoe UI', 14, 'bold')).pack(anchor='w')
+        heading = ttk.Frame(body)
+        heading.pack(fill='x')
+        ttk.Label(heading, text='Choose a check', font=('Segoe UI', 14, 'bold')).pack(side='left')
+        ttk.Button(heading, text='IDOR / BOLA', command=self.open_bola).pack(side='right')
         box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly'); box.pack(fill='x', pady=(4, 2))
         box.bind('<<ComboboxSelected>>', self.tool_changed)
         ttk.Label(body, textvariable=self.info, wraplength=860, justify='left').pack(anchor='w', pady=(2, 8))
@@ -91,6 +97,12 @@ class ToolsWindow(tk.Toplevel):
         watch_variables(self, (self.environment,), self.environment_changed)
         self.update_backend_controls()
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
+
+    def open_bola(self):
+        window = self.app.open_local_utilities()
+        window.notebook.select(window.bola_pane)
+        window.lift()
+        return window
 
     def update_backend_controls(self):
         kind = self.backend.get()
@@ -224,7 +236,9 @@ class ToolsWindow(tk.Toplevel):
         t = self.tool
         kind = self.backend.get()
         if kind == 'native':
-            availability = '' if t.installed() else '\nTool is missing locally. Press Start for installation details.'
+            availability = '\nIncluded in Sentinel for Windows.' if bundled_binary(t.id) else ''
+            if not t.installed():
+                availability = '\nTool is missing locally. Press Start for installation details.'
         elif self.bundled and not self.environment.get().strip():
             availability = '\nChoose Prepare included tools for WhatWeb and sslscan. WSL setup may request administrator access and a restart.'
         elif t.id not in SUPPORTED:
