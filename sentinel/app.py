@@ -371,7 +371,7 @@ class App(tk.Tk):
             pid=self.store.project(name)
         except (ValueError,PermissionError) as e:messagebox.showerror('Cannot start',str(e));return
         self.progress.configure(mode='indeterminate')
-        self.progress.start(18)
+        self.progress.start(60)
         self.busy=True; self.cancel_event=Event(); self.stop_btn.configure(state='normal'); self.run_btn.configure(state='disabled'); self.status.set('Assessing authorized URL…')
         cancel, queue = self.cancel_event, self.queue
         try:
@@ -386,7 +386,9 @@ class App(tk.Tk):
             self.cancel_event.set(); self.stop_btn.configure(state='disabled'); self.status.set('Stopping after current bounded operation…')
     def poll(self):
         if self.busy and hasattr(self, 'job') and not self.cancel_event.is_set():
-            self.status.set(self.job.state.capitalize() + ' • authorized assessment')
+            status = self.job.state.capitalize() + ' • authorized assessment'
+            if self.status.get() != status:
+                self.status.set(status)
         try:
             pid,name,result,error=self.queue.get_nowait()
             self.progress.stop()
@@ -397,23 +399,31 @@ class App(tk.Tk):
                 sid=self.store.save(pid,result); self.project.set(name); self.project_box.configure(values=self.store.projects()); self.load_history(sid); self.show_workspace('findings'); self.status.set('Assessment '+result['status']+' • Saved locally.')
         except Empty:pass
         except Exception as e:self.status.set('Local storage/UI error: '+type(e).__name__)
-        self.poll_timer = self.after(100,self.poll)
+        self.poll_timer = self.after(100 if self.busy else 350,self.poll)
     def load_history(self,select_id=None):
         if self.busy:return
         try:pid=self.store.project(self.project.get())
         except ValueError as e:messagebox.showerror('Project',str(e));return
         self.history_project_id = pid
-        self.project_box.configure(values=self.store.projects()); self.records=self.store.history(pid); self.history.delete(*self.history.get_children())
+        self.project_box.configure(values=self.store.projects()); self.records=self.store.history_summary(pid); self.history.delete(*self.history.get_children())
         self.assessment_count.set(str(len(self.records)))
-        for sid,r in self.records:self.history.insert('','end',iid=str(sid),values=(r['started'][:19].replace('T',' '),r['status']))
+        for sid,started,status in self.records:
+            self.history.insert('','end',iid=str(sid),values=(started[:19].replace('T',' '),status))
         if self.records:
-            sid=select_id or self.records[0][0]; self.history.selection_set(str(sid)); self.show(dict(self.records)[sid],sid)
+            sid = select_id if select_id is not None and self.history.exists(str(select_id)) else self.records[0][0]
+            self.history.selection_set(str(sid))
+            result = self.store.result(pid, sid)
+            if result is not None:
+                self.show(result, sid)
         else:
             self.reset_inspector(False)
             self.current=None; self.current_id=None; self.review_states = {}; self.refresh_checklist(); self.summary.set('No assessment selected'); self.observation_count.set('—'); self.findings.delete(*self.findings.get_children()); self.set_detail('Run an authorized assessment to begin.')
     def history_selected(self,event=None):
         s=self.history.selection()
-        if s and int(s[0]) in dict(self.records):self.show(dict(self.records)[int(s[0])],int(s[0]))
+        if s and int(s[0]) != self.current_id and self.history_project_id is not None:
+            result = self.store.result(self.history_project_id, int(s[0]))
+            if result is not None:
+                self.show(result, int(s[0]))
     def reset_inspector(self, has_assessment):
         self.highest.set('—')
         self.highest_label.configure(style='Title.TLabel')
@@ -503,10 +513,8 @@ class App(tk.Tk):
     def retest_evidence(self):
         if not self.current or self.current_id is None:
             return
-        previous = next((r for sid, r in self.records
-                         if sid < self.current_id
-                         and r['target'] == self.current['target']
-                         and r.get('profile') == self.current.get('profile')
+        previous = next((r for r in self.store.earlier_results(self.history_project_id, self.current_id, self.current['target'])
+                         if r.get('profile') == self.current.get('profile')
                          and r.get('dns_domain', '') == self.current.get('dns_domain', '')), None)
         if previous is None:
             self.set_detail('No earlier assessment of the same URL, profile and DNS scope.')
@@ -515,7 +523,7 @@ class App(tk.Tk):
 
     def diff(self):
         if not self.current:return
-        prev=next((r for sid,r in self.records if sid<self.current_id and r['target']==self.current['target'] and r.get('profile','web-v1')==self.current.get('profile','web-v1') and r.get('dns_domain','')==self.current.get('dns_domain','')),None)
+        prev=next((r for r in self.store.earlier_results(self.history_project_id, self.current_id, self.current['target']) if r.get('profile','web-v1')==self.current.get('profile','web-v1') and r.get('dns_domain','')==self.current.get('dns_domain','')),None)
         if not prev:messagebox.showinfo('Comparison','No earlier assessment of this exact URL.');return
         d=compare(prev,self.current)
         if not d['comparable']:self.set_detail('Assessment results are not comparable (incomplete checks, changed scope, profile or HTTP status).');return

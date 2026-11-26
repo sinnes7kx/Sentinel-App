@@ -21,6 +21,8 @@ def _tile(root, fill, radius=9, outline=None):
     size = 2 * radius + 3
     tile = tk.PhotoImage(master=root, width=size, height=size)
     for y in range(size):
+        start = None
+        colors = []
         for x in range(size):
             dx = max(radius - x - .5, x + .5 - (size - radius), 0)
             dy = max(radius - y - .5, y + .5 - (size - radius), 0)
@@ -28,15 +30,24 @@ def _tile(root, fill, radius=9, outline=None):
             if distance <= radius:
                 edge = (distance > radius - 1 or x == 0 or y == 0
                         or x == size - 1 or y == size - 1)
-                tile.put(outline if outline and edge else fill, to=(x, y))
+                if start is None:
+                    start = x
+                colors.append(outline if outline and edge else fill)
+        if colors:
+            tile.put('{' + ' '.join(colors) + '}', to=(start, y))
     return tile
 
 
 def _rounded_button(root, style, name, colors, padding, foreground=INK, anchor='center'):
     radius = 8
+    cache = root._graphite_tile_cache
+    def image(color, outline):
+        key = (color, radius, outline)
+        if key not in cache:
+            cache[key] = _tile(root, color, radius, outline)
+        return cache[key]
     normal, hover, pressed, disabled, focused = [
-        _tile(root, color, radius, ACCENT if i == 4 else None)
-        for i, color in enumerate(colors)]
+        image(color, ACCENT if i == 4 else None) for i, color in enumerate(colors)]
     root._graphite_images.extend((normal, hover, pressed, disabled, focused))
     element = name + '.surface'
     style.element_create(element, 'image', normal,
@@ -64,6 +75,7 @@ def configure_theme(root):
                     fieldbackground=SURFACE, bordercolor=LINE, lightcolor=LINE,
                     darkcolor=LINE, arrowcolor=MUTED, insertcolor=INK, focuscolor=ACCENT)
     root._graphite_images = []
+    root._graphite_tile_cache = {}
     tile = _tile(root, PANEL, 12)
     root._graphite_images.append(tile)
     style.element_create('Card.surface', 'image', tile, border=12, sticky='nsew')

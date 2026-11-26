@@ -18,7 +18,8 @@ class Store:
         CREATE TABLE IF NOT EXISTS scans(id INTEGER PRIMARY KEY, project INTEGER NOT NULL REFERENCES projects(id), target TEXT NOT NULL, started TEXT NOT NULL, result TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS remediation_review(scan INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
         finding_index INTEGER NOT NULL CHECK(finding_index >= 0), state TEXT NOT NULL, updated TEXT NOT NULL,
-        PRIMARY KEY(scan, finding_index));''')
+        PRIMARY KEY(scan, finding_index));
+        CREATE INDEX IF NOT EXISTS scans_project_id ON scans(project, id DESC);''')
         self.conn.commit()
     def project(self, name):
         name = name.strip()
@@ -36,6 +37,20 @@ class Store:
     def history(self, project, limit=-1):
         return [(r[0],sanitize(json.loads(r[1]))) for r in self.conn.execute(
             'SELECT id,result FROM scans WHERE project=? ORDER BY id DESC LIMIT ?', (project, limit))]
+    def history_summary(self, project):
+        """Read only the small list fields; load full evidence on selection."""
+        return [(sid, sanitize(started), sanitize(status or 'unknown'))
+                for sid, started, status in self.conn.execute(
+                    "SELECT id,started,json_extract(result,'$.status') FROM scans "
+                    "WHERE project=? ORDER BY id DESC", (project,))]
+
+    def earlier_results(self, project, scan_id, target):
+        """Stream earlier same-target records only when a comparison is requested."""
+        for (raw,) in self.conn.execute(
+                'SELECT result FROM scans WHERE project=? AND id<? AND target=? ORDER BY id DESC',
+                (project, scan_id, target)):
+            yield sanitize(json.loads(raw))
+
     def result(self, project, scan_id):
         row = self.conn.execute('SELECT result FROM scans WHERE project=? AND id=?', (project, scan_id)).fetchone()
         return sanitize(json.loads(row[0])) if row else None

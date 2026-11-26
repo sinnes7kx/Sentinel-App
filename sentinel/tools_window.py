@@ -436,7 +436,7 @@ class ToolsWindow(tk.Toplevel):
         self.tabs.select(self.results_page)
         self.result = None
         self.presented_findings = {}
-        self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
+        self.tree.delete(*self.tree.get_children()); self.bar.start(60); self.status.set(f'Running {tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
         ev = self.cancel_event
         queue = self.queue
         def operation():
@@ -469,7 +469,9 @@ class ToolsWindow(tk.Toplevel):
     def poll(self):
         self.poll_wsl_probe()
         if self.busy and hasattr(self, 'job') and not self.cancel_event.is_set():
-            self.status.set(self.job.state.capitalize() + ' • security check')
+            status = self.job.state.capitalize() + ' • security check'
+            if self.status.get() != status:
+                self.status.set(status)
         try:
             pid, name, res, err = self.queue.get_nowait()
             self.busy = False; self.bar.stop(); self.run_btn.configure(state='normal'); self.stop_btn.configure(state='disabled')
@@ -494,7 +496,7 @@ class ToolsWindow(tk.Toplevel):
                 self.app.project.set(name); self.app.load_history(sid)
         except Empty: pass
         except Exception as e: self.status.set('Error: ' + type(e).__name__)
-        if self.winfo_exists(): self.poll_timer = self.after(150, self.poll)
+        if self.winfo_exists(): self.poll_timer = self.after(100 if self.busy or self.wsl_busy else 400, self.poll)
 
     def selected(self, _=None):
         s = self.tree.selection()
