@@ -9,8 +9,8 @@ from threading import Event
 from .orchestration import for_app
 from queue import Queue, Empty
 from .tools import TOOLS
-from .tools.base import ToolMissing, parse_scope
-from .tools.scope import require_authorization
+from .tools.base import ToolMissing, bundled_binary, parse_input
+from .tools.runner import clean
 from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
 from .tools import bundle, wsl
 from .tool_setup import saved_source_backend
@@ -39,7 +39,10 @@ class ToolsWindow(tk.Toplevel):
         self.environment_values = {'wsl': '', 'docker': ''}
         self.active_backend = 'native'
         self.bundled = os.name == 'nt' and (bundle.PAYLOAD / 'rootfs.sha256').is_file()
-        if self.bundled:
+        if bundled_binary('whatweb'):
+            self.tool = next(tool for tool in TOOLS if tool.id == 'whatweb')
+            self.tool_name.set(self.tool.name)
+        elif self.bundled:
             preferred = bundle.saved_backend()
             self.backend.set(preferred.kind)
             self.active_backend = preferred.kind
@@ -53,33 +56,14 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_busy = False
         self.wsl_cancel = Event()
         self.bind('<Destroy>', self.cancel_wsl_probe, add='+')
-        shell = ttk.Frame(self, padding=10, style='Canvas.TFrame')
-        shell.pack(fill='both', expand=True)
-        ttk.Label(shell, text='Security tools', style='WorkspaceTitle.TLabel').pack(anchor='w')
-        ttk.Label(shell, text='Choose what to check, enter its address, then review what Sentinel finds.',
-                  style='Canvas.TLabel').pack(anchor='w', pady=(1, 5))
-        self.tabs = ttk.Notebook(shell)
-        self.tabs.pack(fill='both', expand=True)
-        self.setup_page = ttk.Frame(self.tabs, padding=10)
-        self.engine_page = ttk.Frame(self.tabs, padding=10)
-        results = self.results_page = ttk.Frame(self.tabs, padding=8)
-        self.tabs.add(self.setup_page, text='Assessment')
-        self.tabs.add(self.engine_page, text='Engine settings')
-        self.tabs.add(results, text='Findings & evidence')
-        self.tabs.enable_traversal()
-        # Settings use ordinary notebook pages, never a scrolling canvas.
-        body = self.setup_page
-        columns = ttk.Frame(body)
-        columns.pack(fill='both', expand=True)
-        columns.columnconfigure(0, weight=1, uniform='settings')
-        columns.columnconfigure(1, weight=1, uniform='settings')
-        check = ttk.Frame(columns, padding=(0, 0, 10, 0))
-        check.grid(row=0, column=0, sticky='nsew')
-        setup = ttk.Frame(columns, padding=(10, 0, 0, 0))
-        setup.grid(row=0, column=1, sticky='nsew')
-        ttk.Label(check, text='1. What do you want to check?', style='Title.TLabel').pack(anchor='w')
-        box = ttk.Combobox(check, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly')
-        box.pack(fill='x', pady=(4, 2))
+        ttk.Label(self, textvariable=self.status, style='Canvas.TLabel', wraplength=740).pack(
+            side='bottom', fill='x', padx=16, pady=(0, 8))
+        body = ttk.Frame(self, padding=16); body.pack(fill='both', expand=True, padx=16, pady=16)
+        heading = ttk.Frame(body)
+        heading.pack(fill='x')
+        ttk.Label(heading, text='Choose a check', font=('Segoe UI', 14, 'bold')).pack(side='left')
+        ttk.Button(heading, text='IDOR / BOLA', command=self.open_bola).pack(side='right')
+        box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly'); box.pack(fill='x', pady=(4, 2))
         box.bind('<<ComboboxSelected>>', self.tool_changed)
         ttk.Label(check, textvariable=self.info, wraplength=350, justify='left').pack(anchor='w', pady=(2, 4))
         ttk.Label(check, textvariable=self.label, wraplength=350, justify='left').pack(anchor='w')
@@ -110,54 +94,29 @@ class ToolsWindow(tk.Toplevel):
                      state='readonly', width=10).pack(side='left', padx=8)
         self.environment_label = ttk.Label(back)
         self.environment_box = ttk.Combobox(back, textvariable=self.environment)
-        self.wsl_controls = ttk.Frame(self.engine_page)
-        self.prepare_button = ttk.Button(self.wsl_controls, text='Prepare included tools', command=self.prepare_bundle)
-        self.detect_wsl_button = ttk.Button(self.wsl_controls, text='Detect distributions', command=self.detect_wsl)
+        self.wsl_controls = ttk.Frame(body)
+        setup_actions = ttk.Frame(self.wsl_controls)
+        setup_actions.pack(fill='x')
+        self.prepare_button = ttk.Button(setup_actions, text='Prepare included tools', command=self.prepare_bundle)
+        self.detect_wsl_button = ttk.Button(setup_actions, text='Detect distributions', command=self.detect_wsl)
         self.detect_wsl_button.pack(side='left')
-        self.check_wsl_button = ttk.Button(self.wsl_controls, text='Check installed tools', command=self.check_wsl)
+        self.check_wsl_button = ttk.Button(setup_actions, text='Check installed tools', command=self.check_wsl)
         self.check_wsl_button.pack(side='left', padx=6)
-        if os.name == 'nt':
-            ttk.Button(choice_row, text='Set up missing tools', command=self.open_tool_setup).pack(anchor='w')
-        self.saved_toolkit_button = ttk.Button(self.engine_page, text='Use saved Kali toolkit', command=self.use_saved_toolkit)
-
-        self.preparation_status = ttk.Label(self.engine_page, textvariable=self.wsl_status, style='Muted.TLabel',
-                                            wraplength=760, justify='left')
-        self.preparation_status.pack(anchor='w', pady=4)
-        ttk.Label(setup, textvariable=self.recommendation_text, wraplength=350, justify='left',
-                  style='Muted.TLabel').pack(anchor='w', pady=(0, 2))
-
-        action = ttk.Frame(shell, style='Canvas.TFrame')
-        action.pack(side='bottom', fill='x', pady=(4, 0), before=self.tabs)
-        self.run_btn = ttk.Button(action, text='Start assessment', command=self.start, style='Primary.TButton')
-        self.run_btn.pack(side='right')
-        self.stop_btn = ttk.Button(action, text='Stop', command=self.stop, state='disabled')
-        self.stop_btn.pack(side='right', padx=6)
-        ttk.Label(action, textvariable=self.status, style='Canvas.TLabel', wraplength=500).pack(side='left', fill='x', expand=True)
-        self.bar = ttk.Progressbar(shell, mode='indeterminate', style='Scan.Horizontal.TProgressbar')
-        self.bar.pack(side='bottom', fill='x', pady=(2, 0), before=self.tabs)
-        panes = ttk.Panedwindow(results, orient='horizontal')
-        panes.pack(fill='both', expand=True)
-        listing = ttk.Frame(panes, padding=6)
-        evidence = ttk.Frame(panes, padding=6)
-        panes.add(listing, weight=4)
-        panes.add(evidence, weight=5)
-        ttk.Label(listing, text='Findings', style='Title.TLabel').pack(anchor='w', pady=(0, 6))
-        table = ttk.Frame(listing)
-        table.pack(fill='both', expand=True)
-        self.tree = ttk.Treeview(table, columns=('sev', 'title'), show='headings', height=8)
-        self.tree.heading('sev', text='Risk')
-        self.tree.heading('title', text='What was found')
-        self.tree.column('sev', width=80, stretch=False)
-        self.tree.column('title', width=240, minwidth=100)
-        for level, color in SEVERITY_COLORS.items():
-            self.tree.tag_configure(level, foreground=color)
-        scrollable(table, self.tree)
-        self.tree.bind('<<TreeviewSelect>>', self.selected)
-        ttk.Label(evidence, text='Evidence & remediation', style='Title.TLabel').pack(anchor='w', pady=(0, 6))
-        detail = ttk.Frame(evidence)
-        detail.pack(fill='both', expand=True)
-        self.detail = detail_box(detail, height=9)
-        scrollable(detail, self.detail)
+        ttk.Label(self.wsl_controls, textvariable=self.wsl_status, style='Muted.TLabel',
+                  wraplength=700).pack(anchor='w', fill='x')
+        ttk.Checkbutton(body, text='I own this target or have written permission to test it.', variable=self.auth).pack(anchor='w', pady=(4, 2))
+        conf = self.confirm_row = ttk.Frame(body); conf.pack(fill='x', pady=(0, 8))
+        ttk.Label(conf, text='Public target only — confirm the exact host name or IP:').pack(side='left')
+        ttk.Entry(conf, textvariable=self.confirm, width=26).pack(side='left', padx=8)
+        self.bar = ttk.Progressbar(body, mode='indeterminate'); self.bar.pack(fill='x', pady=(0, 8))
+        self.tree = ttk.Treeview(body, columns=('sev', 'title'), show='headings', height=8)
+        self.tree.heading('sev', text='Risk'); self.tree.heading('title', text='What was found')
+        self.tree.column('sev', width=80, stretch=False); self.tree.column('title', width=640)
+        self.tree.pack(fill='both', expand=True); self.tree.bind('<<TreeviewSelect>>', self.selected)
+        self.detail = detail_box(body, height=9)
+        self.detail.pack(fill='both', expand=True, pady=(8, 0))
+        watch_variables(self, (self.target, self.profile, self.backend, self.environment),
+                        lambda *_: self.auth.set(False))
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
         watch_variables(self, (self.target,), self.target_changed_for_recommendation)
@@ -165,8 +124,11 @@ class ToolsWindow(tk.Toplevel):
         self.update_backend_controls()
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
 
-    def on_tab_changed(self, _event=None):
-        self.advanced.set(self.tabs.select() == str(self.engine_page))
+    def open_bola(self):
+        window = self.app.open_local_utilities()
+        window.notebook.select(window.bola_pane)
+        window.lift()
+        return window
 
     def update_backend_controls(self):
         kind = self.backend.get()
@@ -369,13 +331,19 @@ class ToolsWindow(tk.Toplevel):
             self.info.set(t.blurb + '\nUses native tools first and a saved Docker toolkit for compatible checks. Open Tool setup to prepare or test the toolkit. Nikto requires a separate native installation.' + '\n' + t.note)
             return
         if kind == 'native':
-            availability = '' if t.installed() else '\nTool not found on this computer. Choose for me or Set up missing tools.'
+            availability = '\nIncluded in Sentinel for Windows.' if bundled_binary(t.id) else ''
+            if not t.installed():
+                availability = '\nTool is missing locally. Press Start for installation details.'
         elif self.bundled and not self.environment.get().strip():
             availability = '\nChoose Prepare included tools for WhatWeb and sslscan. WSL setup may request administrator access and a restart.'
         elif t.id not in SUPPORTED:
             availability = '\nSelect Nmap, sslscan, or WhatWeb to use this backend.'
         else:
-            availability = '\nUses the executable installed in the selected environment. WSL availability is checked before each assessment.'
+            availability = '\nChoose Check installed tools to verify availability.' if kind == 'wsl' else ''
+        if t.id == 'nmap':
+            availability += '\nNmap requires a separate installation in the selected environment. The offline toolkit includes WhatWeb and sslscan.'
+        if kind == 'wsl':
+            availability += '\nStopping WSL ends the Windows launcher. Linux work can continue until the profile timeout.'
         self.info.set(t.blurb + availability + (('\n' + t.note) if t.note else ''))
 
     def update_profile_help(self, *_):
@@ -396,31 +364,12 @@ class ToolsWindow(tk.Toplevel):
     def start(self):
         if self.busy or self.wsl_busy or self.confirming: return
         try:
-            tool, value, prof = self.tool, self.target.get(), self.profile.get()
-            if prof not in tool.profiles: raise ValueError('Unknown assessment profile.')
-            managed = None
-            if tool.id == 'web-checkup':
-                backend = Backend()
-                try:
-                    candidate = managed_backend()
-                    if candidate and candidate.kind == 'docker' and shutil.which('docker'):
-                        candidate.validate('sslscan')
-                        managed = candidate
-                except (OSError, ValueError, TypeError):
-                    pass
-            else:
-                backend = Backend(self.backend.get(), self.environment.get().strip())
-            backend.validate(tool.id)
-            if backend.kind == 'native' and not tool.installed(): raise ToolMissing(tool.install_hint)
-            name = self.app.project.get()
-            self.confirming = True
-            try:
-                conf = (confirm_tool(self, tool, value, prof, backend, managed=managed)
-                        if tool.id == 'web-checkup' else confirm_tool(self, tool, value, prof, backend))
-            finally:
-                self.confirming = False
-            if conf is None: return
-            pid = self.app.store.project(name)
+            if not self.auth.get(): raise PermissionError('Confirm that you own this target or have written permission to test it.')
+            backend = Backend(self.backend.get(), self.environment.get().strip())
+            parse_input(self.tool, self.target.get())
+            backend.validate(self.tool.id)
+            if backend.kind == 'native' and not self.tool.installed(): raise ToolMissing(self.tool.install_hint)
+            name = self.app.project.get(); pid = self.app.store.project(name)
         except ToolMissing as e:
             if os.name == 'nt' and self.tool.id in ('nmap', 'whatweb', 'sslscan'):
                 window = self.open_tool_setup()
@@ -433,31 +382,32 @@ class ToolsWindow(tk.Toplevel):
             messagebox.showerror('Cannot start', str(e), parent=self); return
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
         self.update_backend_controls()
-        self.tabs.select(self.results_page)
         self.result = None
-        self.presented_findings = {}
-        self.tree.delete(*self.tree.get_children()); self.bar.start(60); self.status.set(f'Running {tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
-        ev = self.cancel_event
+        self.tree.delete(*self.tree.get_children()); self.bar.start(12); self.status.set(f'Running {self.tool.name}…'); self.say('Running. Some checks take several minutes; you can press Stop at any time.')
+        tool, value, prof, conf, ev = self.tool, self.target.get(), self.profile.get(), self.confirm.get(), self.cancel_event
         queue = self.queue
-        def operation():
-            if backend.kind == 'wsl':
-                try:
-                    installed = wsl.available_tools(backend.environment, ev)
-                except ValueError as exc:
-                    return {'status': 'failed', 'setup_error': str(exc)}
-                if ev.is_set():
-                    return {'status': 'cancelled', 'setup_error': 'Cancelled during engine check.'}
-                missing = [name for name in ('timeout', tool.id) if name not in installed]
-                if missing:
-                    return {'status': 'failed', 'setup_error':
-                            'Missing in selected WSL distribution: ' + ', '.join(missing) +
-                            '. Open that Linux terminal and install the required packages. ' +
-                            ('For Nmap: sudo apt update && sudo apt install nmap.' if tool.id == 'nmap'
-                             else 'For Kali/Debian, use the package manager or Prepare included tools.')}
-            return tool.scan(value, prof, True, conf, ev, **({'backend': backend} if tool.id != 'web-checkup' else {'managed': managed})).to_dict()
+        self.auth.set(False)
+        def run_check():
+            try:
+                if backend.kind == 'wsl':
+                    found = wsl.available_tools(backend.environment, ev)
+                    if ev.is_set():
+                        return None
+                    missing = [name for name in (tool.id, 'timeout') if name not in found]
+                    if missing:
+                        available = ', '.join(sorted(SUPPORTED.intersection(found))) or 'none detected'
+                        raise ToolMissing(f"{backend.environment} is missing {', '.join(missing)}. "
+                                          f"Detected assessment tools: {available}.")
+                options = {'backend': backend} if tool.id != 'web-checkup' else {}
+                return tool.scan(value, prof, True, conf, ev, **options).to_dict()
+            except (ValueError, PermissionError, ToolMissing) as exc:
+                if isinstance(exc, PermissionError) and exc.errno is not None:
+                    raise
+                return {'status': 'failed', 'start_error': clean(str(exc), 500)}
+
         try:
             self.job = self.orchestrator.submit(
-                operation,
+                run_check,
                 lambda result, error: queue.put((pid, name, result, error)), ev)
             self.status.set('Queued; one check runs at a time.')
         except RuntimeError as exc:
@@ -476,6 +426,8 @@ class ToolsWindow(tk.Toplevel):
             pid, name, res, err = self.queue.get_nowait()
             self.busy = False; self.bar.stop(); self.run_btn.configure(state='normal'); self.stop_btn.configure(state='disabled')
             self.update_backend_controls()
+            if res and res.get('start_error'):
+                err = res['start_error']
             if err: self.status.set('Error: ' + err); self.say('The check could not run. ' + err)
             elif res.get('setup_error'):
                 self.status.set(res['setup_error'])

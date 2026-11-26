@@ -3,10 +3,10 @@ import json
 
 from ..engine import Finding
 from . import runner
-from .base import Profile, ToolSpec
+from .base import NATIVE_TOOLS, Profile, ToolSpec
 
 INSTALL_HINT = ('WhatWeb is not installed. On Kali/Debian/Ubuntu run: sudo apt install whatweb\n'
-                'WhatWeb is a Ruby program; on Windows use WSL or run Sentinel on Kali.')
+                'The Sentinel Windows installer includes WhatWeb and its Ruby runtime.')
 
 PROFILES = {
     'passive': Profile('passive', 'Passive (1 request)', 'Reads what the home page reveals. One normal request.',
@@ -59,7 +59,10 @@ def parse_json(text, private=False):
 
 
 def build(binary, target, profile, outfile):
-    return [binary, '--no-errors', '--color=never', '--follow-redirect=never',
+    command = [binary]
+    if binary == str(NATIVE_TOOLS / 'ruby/bin/ruby.exe'):
+        command.append(str(NATIVE_TOOLS / 'launch-whatweb.rb'))
+    return [*command, '--no-errors', '--color=never', '--follow-redirect=never',
             '--max-threads=1', '--log-json=' + outfile, *PROFILES[profile].args, target.url]
 
 

@@ -7,6 +7,7 @@ output, and return an ordinary sentinel.engine.Scan.
 """
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 import os
 import shutil
@@ -14,7 +15,7 @@ import tempfile
 
 from ..engine import Scan, Target
 from . import runner
-from .scope import parse_net_target, require_authorization
+from .scope import parse_net_input, resolve_net_target, require_authorization
 from .backends import Backend
 
 
@@ -56,7 +57,26 @@ class ToolSpec:
         return execute(self, value, profile, attested, confirm, cancel, **kw)
 
 
+NATIVE_TOOLS = Path(__file__).resolve().parents[2] / 'native-tools'
+
+
+def bundled_binary(tool):
+    if os.name == 'nt':
+        if tool == 'sslscan':
+            exe = NATIVE_TOOLS / 'sslscan/sslscan.exe'
+        elif tool == 'whatweb' and (NATIVE_TOOLS / 'whatweb/whatweb').is_file() and (NATIVE_TOOLS / 'launch-whatweb.rb').is_file():
+            exe = NATIVE_TOOLS / 'ruby/bin/ruby.exe'
+        else:
+            return None
+        if exe.is_file():
+            return str(exe)
+    return None
+
+
 def find_binary(spec):
+    packaged = bundled_binary(spec.id)
+    if packaged:
+        return packaged
     for name in spec.binaries:
         found = shutil.which(name)
         if found:
@@ -68,16 +88,21 @@ def find_binary(spec):
     return None
 
 
-def parse_scope(spec, value, resolver=None):
-    """Return (target, scope, label). `scope` is the NetTarget used for authorization."""
-    resolve = (lambda h: parse_net_target(h, resolver)) if resolver else parse_net_target
+def parse_input(spec, value):
+    """Check target syntax without contacting a resolver or starting a tool."""
     if spec.kind == 'net':
-        scope = resolve(value)
-        return scope, scope, scope.value
+        target = parse_net_input(value)
+        return target, target
     target = Target.parse(value)
     if spec.schemes and target.scheme not in spec.schemes:
         raise ValueError(f"{spec.name} needs an {' or '.join(s + '://' for s in spec.schemes)} address.")
-    return target, resolve(target.host), target.url
+    return target, parse_net_input(target.host)
+
+
+def parse_scope(spec, value, resolver=None):
+    target, scope = parse_input(spec, value)
+    scope = resolve_net_target(scope, resolver) if resolver else resolve_net_target(scope)
+    return (scope, scope, scope.value) if spec.kind == 'net' else (target, scope, target.url)
 
 
 def execute(spec, value, profile, attested=False, typed_confirmation='', cancel=None,

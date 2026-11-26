@@ -1,4 +1,5 @@
 """Desktop access to local file integrity checks and tool report review."""
+from pathlib import Path
 from queue import Empty, Queue
 from threading import Event
 import tkinter as tk
@@ -36,6 +37,7 @@ class LocalUtilitiesWindow(tk.Toplevel):
         self.status = tk.StringVar(value='Ready')
         self.integrity_path = tk.StringVar()
         self.expected_digest = tk.StringVar()
+        self.bola_path = tk.StringVar()
         self.report_path = tk.StringVar()
         self.report_format = tk.StringVar(value=next(iter(REPORT_FORMATS)))
 
@@ -46,6 +48,22 @@ class LocalUtilitiesWindow(tk.Toplevel):
         notebook.enable_traversal()
         self.integrity_output = self.build_integrity(notebook)
         self.report_output = self.build_review(notebook)
+        self.notebook = notebook
+        self.bola_pane = ttk.Frame(notebook, padding=12)
+        notebook.add(self.bola_pane, text='IDOR / BOLA')
+        ttk.Label(self.bola_pane, text='Compare recorded API reads with the subjects allowed to read each object. '
+                  'Use pseudonymous IDs and response object IDs from your test logs.',
+                  style='Muted.TLabel', wraplength=540).pack(anchor='w', pady=(0, 8))
+        self.file_field(self.bola_pane, 'Access policy and recorded reads (JSON)', self.bola_path,
+                        lambda: [('JSON', '*.json')])
+        row = ttk.Frame(self.bola_pane)
+        row.pack(fill='x', pady=8)
+        for label, command in [('Check object access', self.start_bola), ('Save example…', self.save_bola_example)]:
+            button = ttk.Button(row, text=label, command=command)
+            button.pack(side='left', padx=(0, 6))
+            self.controls.append(button)
+        self.bola_output = self.output_box(self.bola_pane)
+        watch_variables(self, (self.bola_path,), lambda *_: self.clear_output(self.bola_output))
         watch_variables(self, (self.integrity_path, self.expected_digest),
                         lambda *_: self.clear_output(self.integrity_output))
         watch_variables(self, (self.report_path, self.report_format),
@@ -156,6 +174,23 @@ class LocalUtilitiesWindow(tk.Toplevel):
     def start_integrity(self):
         path, expected = self.integrity_path.get(), self.expected_digest.get()
         self.start(path, self.integrity_output, lambda cancel: inspect_integrity(path, expected, cancel))
+
+    def save_bola_example(self):
+        destination = filedialog.asksaveasfilename(parent=self, defaultextension='.json',
+                                                   initialfile='example-object-reads.json', filetypes=[('JSON', '*.json')])
+        if destination:
+            try:
+                template = Path(__file__).with_name('examples') / 'object-reads.json'
+                Path(destination).write_bytes(template.read_bytes())
+            except OSError:
+                self.status.set('Could not save the example.')
+                return
+            self.bola_path.set(destination)
+            self.status.set('Example saved. Replace the sample policy and responses with your test evidence.')
+
+    def start_bola(self):
+        path = self.bola_path.get()
+        self.start(path, self.bola_output, lambda _: review_report(path, 'bola'))
 
     def start_review(self):
         path = self.report_path.get()
