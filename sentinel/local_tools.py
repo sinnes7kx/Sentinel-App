@@ -7,6 +7,7 @@ import re
 import stat
 
 from .review import MAX_REPORT, summarize
+from .zap_review import detail_summary
 
 
 def _regular_file(path):
@@ -52,4 +53,6 @@ def review_report(path, format_name):
         raw = stream.read(MAX_REPORT + 1)
     if not raw or len(raw) > MAX_REPORT:
         raise ValueError('Choose a nonempty report of at most 5 MB.')
+    if format_name == 'zap-detail':
+        return detail_summary(raw)
     return summarize(format_name, raw)

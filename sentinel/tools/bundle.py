@@ -7,7 +7,7 @@ import re
 import subprocess
 
 from . import wsl
-from .backends import Backend
+from .backends import Backend, local_docker_prefix
 
 PAYLOAD = Path(__file__).resolve().parents[2] / 'toolkit'
 BUNDLED_TOOLS = ('whatweb', 'sslscan')
@@ -69,18 +69,19 @@ def prepare(kind, payload=PAYLOAD):
     if kind == 'docker':
         # Archive import produces a local image ID. It has no registry digest.
         tag = 'sentinel-local/kali:' + digest[:20]
-        checked(['docker', 'version', '--format', '{{.Server.Version}}'])
-        inspect = ['docker', 'image', 'inspect', '--format', '{{.Id}} {{index .Config.Labels "sentinel.rootfs"}}', tag]
+        prefix = local_docker_prefix()
+        checked(prefix + ['version', '--format', '{{.Server.Version}}'])
+        inspect = prefix + ['image', 'inspect', '--format', '{{.Id}} {{index .Config.Labels "sentinel.rootfs"}}', tag]
         code, output = call(inspect)
         if code:
-            checked(['docker', 'image', 'import', '--platform', 'linux/amd64', '--change',
+            checked(prefix + ['image', 'import', '--platform', 'linux/amd64', '--change',
                      'LABEL sentinel.rootfs=' + digest, str(archive), tag], 900)
             output = checked(inspect)
         parts = output.split()
         if len(parts) != 2 or parts[1] != digest or not re.fullmatch(r'sha256:[0-9a-f]{64}', parts[0]):
             raise ValueError('The local Docker image conflicts with this toolkit. Check the Sentinel image tag.')
         environment = parts[0]
-        checked(['docker', 'run', '--rm', '--pull=never', '--network=none', '--cap-drop=ALL',
+        checked(prefix + ['run', '--rm', '--pull=never', '--network=none', '--cap-drop=ALL',
                  environment, '/bin/sh', '-ec', 'command -v whatweb && command -v sslscan && command -v timeout'])
     else:
         if os.name != 'nt':

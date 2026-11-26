@@ -54,9 +54,11 @@ def parse_xml(text, private=False, now=None):
             add(f'TLS_SSL{ver}', 'high', f'SSL {ver} is enabled', f'The server still accepts the obsolete SSL {ver} protocol.', FIX_TLS)
         if on and typ == 'tls' and ver in ('1.0', '1.1'):
             add(f'TLS_{ver}', 'medium', f'TLS {ver} is enabled', f'The server still accepts TLS {ver}, which is deprecated.', FIX_TLS)
-    if enabled and not enabled.get(('tls', '1.2')) and not enabled.get(('tls', '1.3')):
+    if not enabled:
+        raise ValueError('No TLS protocol evidence in sslscan output.')
+    if all(key in enabled for key in (('tls', '1.2'), ('tls', '1.3'))) and not enabled[('tls', '1.2')] and not enabled[('tls', '1.3')]:
         add('TLS_NO_MODERN', 'high', 'No modern TLS version offered', 'Neither TLS 1.2 nor TLS 1.3 was accepted.', FIX_TLS)
-    elif enabled and ('tls', '1.3') in enabled and not enabled[('tls', '1.3')]:
+    elif enabled.get(('tls', '1.2')) and ('tls', '1.3') in enabled and not enabled[('tls', '1.3')]:
         add('TLS_NO_13', 'info', 'TLS 1.3 is not offered', 'TLS 1.2 works, but TLS 1.3 is faster and removes legacy options.', 'Enable TLS 1.3 if your server software supports it.')
     weak = {}
     for c in st.findall('cipher'):
@@ -102,7 +104,8 @@ def parse_xml(text, private=False, now=None):
         except ValueError:
             pass
     out.sort(key=lambda f: ({'high': 0, 'medium': 1, 'low': 2, 'info': 3}[f.severity], f.id))
-    return out, {'protocols_seen': len(enabled)}, ''
+    note = '' if all(key in enabled for key in (('tls', '1.2'), ('tls', '1.3'))) else 'Protocol evidence truncated or incomplete: modern TLS versions not both reported.'
+    return out, {'protocols_seen': len(enabled)}, note
 
 
 def _parse(text, private):

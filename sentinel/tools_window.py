@@ -1,7 +1,9 @@
 """Beginner window for every integrated security tool."""
-from .ui_lifecycle import watch_poll, watch_variables
+from .ui_lifecycle import watch_poll, watch_variables, bind_escape
+from .scan_confirmation import confirm_tool
+from .finding_views import finding_views, finding_detail
 import tkinter as tk
-from .desktop_theme import CANVAS, detail_box
+from .desktop_theme import CANVAS, PANEL, SEVERITY_COLORS, detail_box, scrollable
 from tkinter import ttk, messagebox
 from threading import Event
 from .orchestration import for_app
@@ -11,6 +13,10 @@ from .tools.base import ToolMissing, bundled_binary, parse_input
 from .tools.runner import clean
 from .tools.backends import Backend, SUPPORTED, is_wsl_distribution
 from .tools import bundle, wsl
+from .tool_setup import saved_source_backend
+from .engine_choice import recommend
+from .tool_inventory import managed_backend
+import shutil
 import os
 
 DEFAULTS = {'net': '192.168.1.1', 'web': 'https://'}
@@ -19,14 +25,15 @@ LABELS = {'net': 'Target: an IP address, a host name, or a home/office network s
 
 
 class ToolsWindow(tk.Toplevel):
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, app, **options):
+        super().__init__(app, **options)
+        bind_escape(self, self.close)
         watch_poll(self)
         self.orchestrator = for_app(app)
         self.app = app; self.queue = Queue(); self.busy = False; self.cancel_event = Event(); self.result = None
-        self.title('Sentinel | Security tools'); self.geometry('940x720'); self.minsize(780, 600); self.configure(bg=CANVAS)
+        self.title('Sentinel | Security tools'); self.geometry('920x620'); self.minsize(820, 580); self.configure(bg=CANVAS)
         self.tool = TOOLS[0]; self.target = tk.StringVar(value=DEFAULTS['web']); self.profile = tk.StringVar()
-        self.auth = tk.BooleanVar(); self.confirm = tk.StringVar(); self.status = tk.StringVar(value='Ready.')
+        self.confirming = False; self.status = tk.StringVar(value='Ready.')
         self.tool_name = tk.StringVar(value=self.tool.name); self.info = tk.StringVar(); self.label = tk.StringVar()
         self.backend = tk.StringVar(value='native'); self.environment = tk.StringVar()
         self.environment_values = {'wsl': '', 'docker': ''}
@@ -58,16 +65,33 @@ class ToolsWindow(tk.Toplevel):
         ttk.Button(heading, text='IDOR / BOLA', command=self.open_bola).pack(side='right')
         box = ttk.Combobox(body, textvariable=self.tool_name, values=[t.name for t in TOOLS], state='readonly'); box.pack(fill='x', pady=(4, 2))
         box.bind('<<ComboboxSelected>>', self.tool_changed)
-        ttk.Label(body, textvariable=self.info, wraplength=860, justify='left').pack(anchor='w', pady=(2, 8))
-        ttk.Label(body, textvariable=self.label).pack(anchor='w')
-        row = ttk.Frame(body); row.pack(fill='x'); row.columnconfigure(0, weight=1)
-        ttk.Entry(row, textvariable=self.target).grid(row=0, column=0, sticky='ew')
-        self.run_btn = ttk.Button(row, text='Start', command=self.start); self.run_btn.grid(row=0, column=1, padx=(10, 0))
-        self.stop_btn = ttk.Button(row, text='Stop', command=self.stop, state='disabled'); self.stop_btn.grid(row=0, column=2, padx=(8, 0))
-        self.profiles = ttk.Frame(body); self.profiles.pack(fill='x', pady=8)
-        back = ttk.Frame(body); back.pack(fill='x', pady=4)
-        ttk.Label(back, text='Run using').pack(side='left')
-        ttk.Combobox(back, textvariable=self.backend, values=['native', 'wsl', 'docker'], state='readonly', width=10).pack(side='left', padx=8)
+        ttk.Label(check, textvariable=self.info, wraplength=350, justify='left').pack(anchor='w', pady=(2, 4))
+        ttk.Label(check, textvariable=self.label, wraplength=350, justify='left').pack(anchor='w')
+        ttk.Entry(check, textvariable=self.target).pack(fill='x', pady=(3, 6))
+        self.profiles = ttk.Frame(check)
+        self.profiles.pack(fill='x', pady=(1, 4))
+        self.profile_help = tk.StringVar()
+        ttk.Label(check, textvariable=self.profile_help, style='Muted.TLabel', wraplength=350,
+                  justify='left').pack(anchor='w', pady=(0, 2))
+        ttk.Label(setup, text='2. Choose the setup', style='Title.TLabel').pack(anchor='w')
+        self.engine_hint = tk.StringVar()
+        ttk.Label(setup, textvariable=self.engine_hint, wraplength=350, justify='left',
+                  style='Muted.TLabel').pack(anchor='w', pady=(2, 5))
+        self.recommendation_text = tk.StringVar(value='Let Sentinel choose an existing setup, or change it manually.')
+        ttk.Label(self.engine_page, text='Advanced engine settings', style='Title.TLabel').pack(anchor='w', pady=(0, 4))
+        ttk.Label(self.engine_page, textvariable=self.recommendation_text, wraplength=760,
+                  style='Muted.TLabel', justify='left').pack(anchor='w', pady=(2, 5))
+        choice_row = ttk.Frame(setup)
+        choice_row.pack(fill='x', pady=4)
+        self.recommend_button = ttk.Button(choice_row, text='Choose for me', command=self.choose_engine)
+        self.recommend_button.pack(anchor='w', pady=(0, 3))
+        self.advanced = tk.BooleanVar(value=False)
+        ttk.Button(choice_row, text='Engine settings', command=lambda: self.tabs.select(self.engine_page)).pack(anchor='w', pady=(0, 3))
+        self.tabs.bind('<<NotebookTabChanged>>', self.on_tab_changed)
+        back = self.backend_row = ttk.Frame(self.engine_page)
+        ttk.Label(back, text='Engine').pack(side='left')
+        ttk.Combobox(back, textvariable=self.backend, values=['native', 'wsl', 'docker'],
+                     state='readonly', width=10).pack(side='left', padx=8)
         self.environment_label = ttk.Label(back)
         self.environment_box = ttk.Combobox(back, textvariable=self.environment)
         self.wsl_controls = ttk.Frame(body)
@@ -95,6 +119,8 @@ class ToolsWindow(tk.Toplevel):
                         lambda *_: self.auth.set(False))
         watch_variables(self, (self.backend,), self.backend_changed)
         watch_variables(self, (self.environment,), self.environment_changed)
+        watch_variables(self, (self.target,), self.target_changed_for_recommendation)
+        watch_variables(self, (self.profile,), self.update_profile_help)
         self.update_backend_controls()
         self.refresh_tool(); self.protocol('WM_DELETE_WINDOW', self.close); self.poll_timer = self.after(150, self.poll)
 
@@ -106,6 +132,18 @@ class ToolsWindow(tk.Toplevel):
 
     def update_backend_controls(self):
         kind = self.backend.get()
+        self.recommend_button.state(['disabled'] if self.busy or self.wsl_busy else ['!disabled'])
+        if not self.backend_row.winfo_manager():
+            self.backend_row.pack(before=self.preparation_status, fill='x', pady=4)
+        if (self.bundled or os.name == 'nt') and not self.saved_toolkit_button.winfo_manager():
+            self.saved_toolkit_button.pack(before=self.preparation_status, anchor='w', pady=(2, 4))
+        self.engine_hint.set({
+            'native': 'Current setup: local executable (runs on this computer). No Kali needed.',
+            'wsl': 'Current setup: Windows Linux environment. Stopping the Linux tool may take longer.',
+            'docker': 'Current setup: managed Docker container. Its network access is not limited to the target.',
+        }[kind])
+        self.saved_toolkit_button.state(['disabled'] if self.busy or self.wsl_busy or
+                                         self.tool.id not in bundle.BUNDLED_TOOLS else ['!disabled'])
         self.environment_label.configure(text={'native': '', 'wsl': 'Distribution', 'docker': 'Image ID or digest'}[kind])
         self.environment_box.configure(values=self.wsl_names if kind == 'wsl' else (),
                                        state='disabled' if self.wsl_busy else 'normal')
@@ -122,7 +160,7 @@ class ToolsWindow(tk.Toplevel):
             self.prepare_button.pack_forget()
         if kind == 'wsl' or (self.bundled and kind == 'docker'):
             if not self.wsl_controls.winfo_manager():
-                self.wsl_controls.pack(before=self.confirm_row, fill='x', pady=(0, 4))
+                self.wsl_controls.pack(before=self.preparation_status, fill='x', pady=(0, 4))
         else:
             self.wsl_controls.pack_forget()
         self.detect_wsl_button.state(['disabled'] if kind != 'wsl' or self.wsl_busy or self.busy else ['!disabled'])
@@ -141,6 +179,57 @@ class ToolsWindow(tk.Toplevel):
         self.wsl_status.set('')
         self.update_tool_info()
         self.update_backend_controls()
+
+    def target_changed_for_recommendation(self, *_):
+        self.recommendation_text.set('Choose for me to review the setup for this address.')
+
+    def choose_engine(self):
+        if self.busy or self.wsl_busy:
+            return
+        try:
+            saved = bundle.saved_backend() if self.bundled else saved_source_backend()
+        except (OSError, ValueError, TypeError):
+            saved = None
+        choice = recommend(self.tool, self.target.get(), self.tool.installed(), saved,
+                           bool(shutil.which('docker')))
+        if choice.backend is not None:
+            backend = choice.backend
+            changed = (self.backend.get(), self.environment.get()) != (backend.kind, backend.environment)
+            if self.backend.get() != backend.kind:
+                self.backend.set(backend.kind)
+            if self.environment.get() != backend.environment:
+                self.environment.set(backend.environment)
+            self.recommendation_text.set(choice.explanation +
+                                         (' Confirm permission for the changed setup.' if changed else ''))
+        else:
+            self.recommendation_text.set(choice.explanation + ' Current setup unchanged.')
+        self.update_backend_controls()
+
+    def open_tool_setup(self):
+        from .tool_setup_window import ToolSetupWindow
+        window = self.children.get('tool_setup')
+        if window is None:
+            window = ToolSetupWindow(self)
+        else:
+            window.deiconify()
+            window.lift()
+        return window
+
+    def use_saved_toolkit(self):
+        if self.busy or self.wsl_busy or self.tool.id not in bundle.BUNDLED_TOOLS:
+            return
+        saved = bundle.saved_backend() if self.bundled else saved_source_backend()
+        if saved is None:
+            self.wsl_status.set('No saved toolkit yet. Choose Install / prepare security tools.')
+            return
+        try:
+            saved.validate(self.tool.id)
+        except ValueError:
+            self.wsl_status.set('No saved toolkit yet. Choose WSL or Docker, then Prepare included tools.')
+            return
+        self.backend.set(saved.kind)
+        self.environment.set(saved.environment)
+        self.wsl_status.set('Saved toolkit selected. Current runtime and scan connectivity are not verified.')
 
     def prepare_bundle(self):
         kind = self.backend.get()
@@ -199,7 +288,7 @@ class ToolsWindow(tk.Toplevel):
             self.wsl_status.set(error)
         elif action == 'prepare':
             self.environment.set(result['values'])
-            self.wsl_status.set('Ready · WhatWeb and sslscan')
+            self.wsl_status.set('Prepared · WhatWeb and sslscan detected; scan connectivity not verified.')
         elif action == 'list':
             self.wsl_names = result['values']
             if self.wsl_names and self.environment.get().strip() not in self.wsl_names:
@@ -228,13 +317,19 @@ class ToolsWindow(tk.Toplevel):
         self.detail.configure(state='normal'); self.detail.delete('1.0', 'end'); self.detail.insert('1.0', text); self.detail.configure(state='disabled')
 
     def tool_changed(self, _=None):
-        old = self.tool.kind; self.tool = next(t for t in TOOLS if t.name == self.tool_name.get())
+        chosen = next(t for t in TOOLS if t.name == self.tool_name.get())
+        if chosen.id == self.tool.id:
+            return
+        old = self.tool.kind; self.tool = chosen
         if self.tool.kind != old and self.target.get() in DEFAULTS.values(): self.target.set(DEFAULTS[self.tool.kind])
-        self.auth.set(False); self.refresh_tool()
+        self.refresh_tool(); self.recommendation_text.set('Choose for me to select an existing setup for this check.'); self.update_backend_controls()
 
     def update_tool_info(self):
         t = self.tool
         kind = self.backend.get()
+        if t.id == 'web-checkup':
+            self.info.set(t.blurb + '\nUses native tools first and a saved Docker toolkit for compatible checks. Open Tool setup to prepare or test the toolkit. Nikto requires a separate native installation.' + '\n' + t.note)
+            return
         if kind == 'native':
             availability = '\nIncluded in Sentinel for Windows.' if bundled_binary(t.id) else ''
             if not t.installed():
@@ -251,6 +346,10 @@ class ToolsWindow(tk.Toplevel):
             availability += '\nStopping WSL ends the Windows launcher. Linux work can continue until the profile timeout.'
         self.info.set(t.blurb + availability + (('\n' + t.note) if t.note else ''))
 
+    def update_profile_help(self, *_):
+        profile = self.tool.profiles.get(self.profile.get())
+        self.profile_help.set(profile.blurb if profile else '')
+
     def refresh_tool(self):
         t = self.tool
         self.update_tool_info()
@@ -258,11 +357,12 @@ class ToolsWindow(tk.Toplevel):
         for w in self.profiles.winfo_children(): w.destroy()
         first = next(iter(t.profiles)); self.profile.set(first)
         for p in t.profiles.values():
-            ttk.Radiobutton(self.profiles, text=f'{p.label} — {p.blurb}', variable=self.profile, value=p.id).pack(anchor='w')
+            ttk.Radiobutton(self.profiles, text=p.label, variable=self.profile, value=p.id).pack(anchor='w')
+        self.update_profile_help()
         self.say('Results appear here. Click a row for a plain-English explanation and how to fix it.')
 
     def start(self):
-        if self.busy or self.wsl_busy: return
+        if self.busy or self.wsl_busy or self.confirming: return
         try:
             if not self.auth.get(): raise PermissionError('Confirm that you own this target or have written permission to test it.')
             backend = Backend(self.backend.get(), self.environment.get().strip())
@@ -271,7 +371,13 @@ class ToolsWindow(tk.Toplevel):
             if backend.kind == 'native' and not self.tool.installed(): raise ToolMissing(self.tool.install_hint)
             name = self.app.project.get(); pid = self.app.store.project(name)
         except ToolMissing as e:
-            messagebox.showinfo('Tool needed', str(e), parent=self); return
+            if os.name == 'nt' and self.tool.id in ('nmap', 'whatweb', 'sslscan'):
+                window = self.open_tool_setup()
+                window.choice.set('nmap' if self.tool.id == 'nmap' else 'toolkit')
+                window.pages.select(window.install_page)
+            else:
+                messagebox.showinfo('Tool needed', str(e), parent=self)
+            return
         except (ValueError, PermissionError) as e:
             messagebox.showerror('Cannot start', str(e), parent=self); return
         self.busy = True; self.cancel_event = Event(); self.run_btn.configure(state='disabled'); self.stop_btn.configure(state='normal')
@@ -313,7 +419,9 @@ class ToolsWindow(tk.Toplevel):
     def poll(self):
         self.poll_wsl_probe()
         if self.busy and hasattr(self, 'job') and not self.cancel_event.is_set():
-            self.status.set(self.job.state.capitalize() + ' • security check')
+            status = self.job.state.capitalize() + ' • security check'
+            if self.status.get() != status:
+                self.status.set(status)
         try:
             pid, name, res, err = self.queue.get_nowait()
             self.busy = False; self.bar.stop(); self.run_btn.configure(state='normal'); self.stop_btn.configure(state='disabled')
@@ -321,22 +429,38 @@ class ToolsWindow(tk.Toplevel):
             if res and res.get('start_error'):
                 err = res['start_error']
             if err: self.status.set('Error: ' + err); self.say('The check could not run. ' + err)
+            elif res.get('setup_error'):
+                self.status.set(res['setup_error'])
+                self.say(res['setup_error'])
+                self.tabs.select(self.setup_page)
+                self.wsl_status.set(res['setup_error'])
             else:
                 self.result = res; sid = self.app.store.save(pid, res)
-                for i, f in enumerate(res['findings']): self.tree.insert('', 'end', iid=str(i), values=(f['severity'].upper(), f['title']))
-                n = len(res['findings']); self.status.set(f"{res['status'].capitalize()} • {n} finding{'s' if n != 1 else ''} • Saved to project history.")
+                views = finding_views(res)
+                self.presented_findings = {str(v.index): v for v in views}
+                for v in views:
+                    f = v.finding
+                    title = f['title'] + (f' ({v.occurrences} identical observations)' if v.occurrences > 1 else '')
+                    self.tree.insert('', 'end', iid=str(v.index), values=(f['severity'].upper(), title), tags=(f['severity'].lower(),))
+                n = len(views); self.status.set(f"{res['status'].capitalize()} • {n} finding{'s' if n != 1 else ''} • Saved to project history.")
                 cov = ', '.join(f'{k}: {v}' for k, v in res['coverage'].items() if k in ('built-in checks', 'whatweb', 'sslscan', 'nikto'))
                 self.say((res['error'] or ('Click a row for details.' if n else 'Nothing was found with these settings. That does not prove the system is secure.')) + ('\n\nCoverage — ' + cov if cov else ''))
                 self.app.project.set(name); self.app.load_history(sid)
         except Empty: pass
         except Exception as e: self.status.set('Error: ' + type(e).__name__)
-        if self.winfo_exists(): self.poll_timer = self.after(150, self.poll)
+        if self.winfo_exists(): self.poll_timer = self.after(100 if self.busy or self.wsl_busy else 400, self.poll)
 
     def selected(self, _=None):
         s = self.tree.selection()
-        if s and self.result:
-            f = self.result['findings'][int(s[0])]; self.say(f"{f['title']}\nConfidence: {f.get('confidence', 'unknown')} | Source: {f.get('source', 'legacy')}\n\nWHAT WE SAW\n{f['evidence']}\n\nWHAT TO DO\n{f['remediation']}")
+        if s and self.result and s[0] in getattr(self, 'presented_findings', {}):
+            self.say(finding_detail(self.presented_findings[s[0]]))
 
     def close(self):
-        if self.busy and not messagebox.askyesno('Exit', 'A check is running. Stop it and close?', parent=self): return
-        self.cancel_event.set(); self.destroy()
+        if self.busy or self.wsl_busy:
+            if not messagebox.askyesno('Exit', 'An operation is running. Request cancellation and close the window?', parent=self):
+                return
+            self.cancel_event.set()
+            self.wsl_cancel.set()
+            # Keep the worker callbacks alive until they finish. A hidden
+            # window retains its exact scope and can be reopened to inspect it.
+        self.withdraw()

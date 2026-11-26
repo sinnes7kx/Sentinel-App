@@ -13,6 +13,8 @@ from unittest.mock import patch
 from sentinel.app import App
 from sentinel.store import Store
 from sentinel.tools_window import ToolsWindow
+from sentinel.tools.backends import Backend
+from sentinel.tools import TOOLS
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -26,7 +28,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class ApplicationTests(unittest.TestCase):
-    def test_shared_scheduler_actual_http_history_and_scope_reset(self):
+    def test_shared_scheduler_actual_http_history_and_start_confirmation(self):
         # Dispose destroyed Tk objects here before a later server thread triggers GC.
         self.addCleanup(gc.collect)
         try:
@@ -43,11 +45,57 @@ class ApplicationTests(unittest.TestCase):
                     app = App()
                 app.withdraw()
                 try:
-                    tools = ToolsWindow(app); tools.withdraw()
+                    app.nav_buttons['Project history'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.history_page))
+                    app.nav_buttons['Findings'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.findings_page))
+                    self.assertIn('New assessment', app.nav_buttons)
+                    tools = app.open_network(); tools.withdraw()
                     self.assertIs(tools.orchestrator, app.orchestrator)
-                    tools.auth.set(True); tools.target.set('127.0.0.1')
-                    self.assertFalse(tools.auth.get())
+                    with patch('sentinel.tool_setup_window.snapshot', return_value={
+                            'status': 'completed', 'rows': [{'name': 'Nmap (native)', 'state': 'Not detected',
+                                                            'detail': 'Fixture only', 'action': 'nmap'}]}):
+                        center = tools.open_tool_setup()
+                        deadline = time.monotonic() + 5
+                        while center.busy and time.monotonic() < deadline:
+                            app.update(); time.sleep(.01)
+                        self.assertFalse(center.busy)
+                        self.assertEqual(center.pages.select(), str(center.inventory_page))
+                        center.pages.select(center.install_page)
+                        self.assertEqual(center.pages.select(), str(center.install_page))
+                        center.pages.select(center.inventory_page)
+                        self.assertTrue(all(option.winfo_manager() == 'grid' for option in center.options))
+                        self.assertEqual(center.tree.item('0', 'values'), ('Nmap (native)', 'Not detected'))
+                        center.tree.selection_set('0')
+                        center.selected()
+                        self.assertEqual(center.detail.get(), 'Fixture only')
+                        with patch('sentinel.tool_setup_window.messagebox.askokcancel', return_value=False):
+                            center.prepare_selected()
+                        self.assertEqual(center.choice.get(), 'nmap')
+                        self.assertFalse(center.busy)
+                        center.destroy()
+                    self.assertEqual(tools.tabs.select(), str(tools.setup_page))
+                    self.assertFalse(any(isinstance(child, tk.Canvas) for child in tools.setup_page.winfo_children()))
+                    tools.tabs.select(tools.engine_page)
+                    self.assertEqual(tools.tabs.select(), str(tools.engine_page))
+                    self.assertEqual(tools.backend_row.master, tools.engine_page)
+                    tools.tabs.select(tools.results_page)
+                    self.assertEqual(tools.tabs.select(), str(tools.results_page))
+                    tools.tabs.select(tools.setup_page)
+                    self.assertIn('local executable', tools.engine_hint.get())
+                    app.update()
+                    self.assertFalse(tools.advanced.get())
+                    self.assertEqual(tools.profile_help.get(), tools.tool.profiles[tools.profile.get()].blurb)
+
+                    tools.choose_engine()
+                    self.assertEqual(tools.backend.get(), 'native')
+
+                    tools.target.set('127.0.0.1')
+
+                    tools.target.set(tools.target.get())
+
                     tools.backend.set('wsl')
+
                     with patch('sentinel.tools_window.wsl.distributions', return_value=['kali-linux', 'Debian']):
                         tools.detect_wsl()
                         deadline = time.monotonic() + 5
@@ -66,11 +114,59 @@ class ApplicationTests(unittest.TestCase):
                     tools.environment.set('fixture-image')
                     tools.backend.set('wsl')
                     self.assertEqual(tools.environment.get(), 'kali-linux')
+                    tools.bundled = True
+                    tools.tool_name.set(next(t.name for t in TOOLS if t.id == 'whatweb'))
+                    tools.tool_changed()
+
+                    with patch('sentinel.tools_window.bundle.saved_backend', return_value=Backend('docker', 'sha256:' + 'a' * 64)):
+                        tools.use_saved_toolkit()
+                    self.assertEqual(tools.backend.get(), 'docker')
+                    self.assertEqual(tools.environment.get(), 'sha256:' + 'a' * 64)
+
+                    self.assertIn('not verified', tools.wsl_status.get())
+                    self.assertFalse(tools.busy)
+
+                    tools.tool_changed()
+
+                    tools.close()
+                    self.assertIs(app.open_network(), tools)
+
+                    with patch('sentinel.tools_window.bundle.saved_backend', return_value=Backend('docker', 'sha256:' + 'a' * 64)), \
+                         patch('sentinel.tools_window.shutil.which', return_value='docker'), \
+                         patch('sentinel.tools.base.find_binary', return_value=None):
+                        tools.target.set('https://192.168.1.10/')
+                        tools.backend.set('native')
+
+                        tools.choose_engine()
+                        self.assertEqual(tools.backend.get(), 'docker')
+
+                        tools.choose_engine()
+
+                        self.assertFalse(tools.busy)
+                    tools.target.set('http://127.0.0.2/')
+
+                    tools.backend.set('wsl')
+                    tools.environment.set('kali-linux')
+
+                    with patch('sentinel.tools_window.confirm_tool', return_value=''), \
+                         patch('sentinel.tools_window.wsl.available_tools', return_value=['timeout']):
+                        tools.start()
+                        deadline = time.monotonic() + 5
+                        while tools.busy and time.monotonic() < deadline:
+                            app.update(); time.sleep(.01)
+                    self.assertFalse(tools.busy)
+                    self.assertIn('Missing in selected WSL distribution', tools.status.get())
+                    self.assertEqual(tools.tabs.select(), str(tools.setup_page))
+                    self.assertEqual(app.store.history(app.store.project(app.project.get())), [])
+
+                    self.assertTrue(tools.bind('<Escape>'))
                     timer = tools.poll_timer
                     tools.destroy()
                     self.assertNotIn(timer, app.tk.call('after', 'info'))
                     app.url.set(f'http://127.0.0.1:{server.server_port}/')
-                    app.auth.set(True); app.run()
+                    with patch('sentinel.app.confirm_website', return_value=True) as confirmation:
+                        app.run()
+                        confirmation.assert_called_once_with(app, app.url.get(), 'Quick', '')
                     deadline = time.monotonic() + 6
                     while app.busy and time.monotonic() < deadline:
                         app.update(); time.sleep(.01)
@@ -87,6 +183,49 @@ class ApplicationTests(unittest.TestCase):
                     app.findings.selection_set(app.findings.get_children()[0])
                     app.finding_selected()
                     self.assertEqual(app.selection_title.get(), records[0][1]['findings'][0]['title'])
+                    first_scan = app.current_id
+                    index = int(app.findings.selection()[0])
+                    app.remediation_state.set('Investigating')
+                    app.save_remediation()
+                    self.assertEqual(app.store.remediation(app.history_project_id, first_scan)[index]['state'], 'Investigating')
+                    app.load_history(first_scan)
+                    app.findings.selection_set(str(index))
+                    app.finding_selected()
+                    self.assertEqual(app.remediation_state.get(), 'Investigating')
+                    app.nav_buttons['Remediation'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.remediation_page))
+                    app.checklist_filter.set('Investigating')
+                    app.refresh_checklist()
+                    self.assertEqual(app.checklist_tree.get_children(), (str(index),))
+                    app.checklist_tree.selection_set(str(index))
+                    app.checklist_selected()
+                    self.assertEqual(app.remediation_state.get(), 'Investigating')
+                    app.remediation_state.set('Retest required')
+                    app.save_remediation()
+                    self.assertEqual(app.checklist_tree.get_children(), ())
+                    self.assertEqual(app.store.remediation(app.history_project_id, first_scan)[index]['state'], 'Retest required')
+                    app.checklist_filter.set('Retest required')
+                    app.refresh_checklist()
+                    self.assertEqual(app.checklist_tree.get_children(), (str(index),))
+                    self.assertEqual(app.store.result(app.history_project_id, first_scan), records[0][1])
+
+                    app.nav_buttons['Project history'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.history_page))
+                    app.nav_buttons['Findings'].invoke()
+                    self.assertEqual(app.workspace_tabs.select(), str(app.findings_page))
+                    with patch('sentinel.app.confirm_website', return_value=True) as confirmation:
+                        app.run()
+                        confirmation.assert_called_once()
+                    deadline = time.monotonic() + 6
+                    while app.busy and time.monotonic() < deadline:
+                        app.update(); time.sleep(.01)
+                    self.assertFalse(app.busy)
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
+                    with patch('sentinel.app.confirm_website', return_value=False) as confirmation:
+                        app.run()
+                        confirmation.assert_called_once()
+                    self.assertFalse(app.busy)
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
                     utilities = app.open_local_utilities()
                     utilities.withdraw()
                     self.assertIs(utilities.orchestrator, app.orchestrator)
@@ -107,7 +246,7 @@ class ApplicationTests(unittest.TestCase):
                     while utilities.busy and time.monotonic() < deadline:
                         app.update(); time.sleep(.01)
                     self.assertIn('Packets in export  1', utilities.report_output.get('1.0', 'end'))
-                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 1)
+                    self.assertEqual(len(app.store.history(app.store.project(app.project.get()))), 2)
                 finally:
                     app.cancel_event.set(); app.orchestrator.shutdown(); app.store.close(); app.destroy()
                     app.orchestrator.worker.join(3)

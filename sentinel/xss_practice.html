@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<title>Sentinel — XSS practice</title>
+<style>body{background:#151518;color:#eee;font:16px/1.5 system-ui;max-width:900px;margin:40px auto;padding:0 20px}h1{font-size:28px}section{background:#242428;border:1px solid #444;border-radius:10px;padding:18px;margin:16px 0}iframe{width:100%;height:100px;border:1px solid #777;background:#fff;border-radius:6px}small{color:#bbb}.weak{color:#ff9060}.safe{color:#65d6a0}</style>
+</head><body>
+<h1>Can a comment become a computer instruction?</h1>
+<p>XSS means a website mistakenly runs code supplied as content. Imagine a comment box that should display words, but instead lets those words change the page.</p>
+<p>This fixed practice page contains two sandboxed frames. It has no external target, input field, network access, real account or sensitive data.</p>
+<section><h2 class="weak">Weak example</h2><p>If the browser runs the fixed harmless demonstration script, the message below changes.</p>
+<iframe title="Weak practice example" sandbox="allow-scripts" srcdoc="&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src 'none'; script-src 'unsafe-inline'; connect-src 'none'; form-action 'none'&quot;&gt;&lt;p id=&quot;message&quot;&gt;Waiting for browser demonstration.&lt;/p&gt;&lt;script&gt;document.getElementById('message').textContent='The practice script ran.';&lt;/script&gt;"></iframe>
+</section>
+<section><h2 class="safe">Protected example</h2><p>Here the same fixed script is shown as plain text, not executed.</p>
+<iframe title="Protected practice example" sandbox srcdoc="&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src 'none'&quot;&gt;&lt;p&gt;Comment shown as text:&lt;/p&gt;&lt;pre&gt;&amp;lt;script&amp;gt;document.getElementById('message').textContent='The practice script ran.';&amp;lt;/script&amp;gt;&lt;/pre&gt;"></iframe>
+</section>
+<h2>How to fix it</h2><p>Show comments as text, not executable HTML. Use context-appropriate output encoding, safe DOM APIs and a restrictive Content Security Policy as an additional defense.</p>
+<small>Observe the browser messages yourself. Sentinel has not automatically measured script execution or tested your website.</small>
+</body></html>

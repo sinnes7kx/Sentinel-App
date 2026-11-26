@@ -1,12 +1,35 @@
 """Explicit optional execution environments. Never install tools or pull images."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import PureWindowsPath
 import re
+import os
 import uuid
 from . import runner
 
 SUPPORTED = {'nmap', 'sslscan', 'whatweb'}
 PROXY_VARIABLES = ('http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')
+
+
+def local_docker_prefix(platform=None):
+    """Use the standard local daemon, never a user's selected remote context."""
+    platform = os.name if platform is None else platform
+    return ['docker', '--host', 'npipe:////./pipe/docker_engine' if platform == 'nt'
+            else 'unix:///var/run/docker.sock']
+
+
+def docker_cleanup(prefix, name, invoke):
+    """Attempt removal and verify absence with a separate daemon query."""
+    try:
+        invoke(prefix + ['rm', '--force', name], 15, None)
+    except (OSError, ValueError, RuntimeError):
+        pass
+    try:
+        checked = invoke(prefix + ['container', 'ls', '-a', '--filter',
+                         'name=^/' + name + '$', '--format', '{{.Names}}'], 10, None)
+        return (checked.returncode == 0 and not checked.cancelled and not checked.timed_out
+                and not checked.truncated and not checked.stdout.strip())
+    except (OSError, ValueError, RuntimeError):
+        return False
 
 
 def is_wsl_distribution(name):
@@ -54,13 +77,15 @@ class Backend:
             raise ValueError('Docker output directory must not contain a comma.')
         name = 'sentinel-' + uuid.uuid4().hex
         command = [a.replace(directory, '/work').replace('\\', '/') for a in argv]
+        prefix = local_docker_prefix()
         try:
-            return invoke(['docker', 'run', '--name', name, '--rm', '--pull=never',
+            result = invoke(prefix + ['run', '--name', name, '--rm', '--pull=never',
                            '--memory=512m', '--cpus=1', '--pids-limit=64', '--cap-drop=ALL',
                            '--security-opt=no-new-privileges', '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
                            *(['--mount', f'type=bind,source={directory},target=/work'] if needs_mount else []),
                            *['--env=' + value for value in direct_env],
                            '--entrypoint', command[0], self.environment, *command[1:]], timeout, cancel)
         finally:
-            # The Docker client exiting does not imply the container stopped.
-            invoke(['docker', 'rm', '--force', name], 15, None)
+            # Removal alone may fail, including after normal --rm cleanup.
+            verified = docker_cleanup(prefix, name, invoke)
+        return replace(result, cleanup_verified=verified)

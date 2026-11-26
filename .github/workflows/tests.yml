@@ -1,8 +1,6 @@
 name: Tests
 on:
-  push:
-    branches: [main, 'dev/**']
-  pull_request:
+  # Cloud testing is opt-in to preserve the private repository's included allowance.
   workflow_dispatch:
 
 permissions:
@@ -45,3 +43,30 @@ jobs:
         env:
           SENTINEL_REQUIRE_GUI: '1'
         run: python -m unittest discover -s tests -v
+
+  kali-lab:
+    name: Kali tools / isolated Docker integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build the bundled Kali toolkit
+        run: docker build --platform linux/amd64 -t sentinel-kali-lab-tools packaging/windows
+      - name: Build the fixture runtime
+        run: |
+          docker build --platform linux/amd64 -t sentinel-kali-lab-fixture - <<'EOF'
+          FROM sentinel-kali-lab-tools
+          RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+          EOF
+      - name: Run real WhatWeb and sslscan against isolated loopback fixtures
+        run: python tests/integration/kali_lab.py
+
+      - name: Prepare upstream ZAP image for isolated fixture test
+        run: docker --host unix:///var/run/docker.sock pull ghcr.io/zaproxy/zaproxy:stable
+      - name: Run real ZAP passive baseline against isolated synthetic fixture
+        run: python tests/integration/zap_lab.py
