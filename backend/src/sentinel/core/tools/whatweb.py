@@ -1,0 +1,71 @@
+"""WhatWeb: identify the technology a website reveals about itself."""
+import json
+
+from ..engine import Finding
+from . import runner
+from .base import NATIVE_TOOLS, Profile, ToolSpec
+
+INSTALL_HINT = ('WhatWeb is not installed. On Kali/Debian/Ubuntu run: sudo apt install whatweb\n'
+                'The Sentinel Windows installer includes WhatWeb and its Ruby runtime.')
+
+PROFILES = {
+    'passive': Profile('passive', 'Passive (1 request)', 'Reads what the home page reveals. One normal request.',
+                       ('-a', '1'), 120, 'one request to the exact URL'),
+    'standard': Profile('standard', 'Standard', 'Also follows up where a technology needs a closer look. A few requests.',
+                        ('-a', '3'), 300, 'a few requests to the site'),
+}
+NOISE = {'ip', 'country', 'title', 'html5', 'uncommonheaders', 'script', 'email', 'httponly', 'cookies', 'meta-refresh-redirect',
+         'redirectlocation', 'x-frame-options', 'strict-transport-security', 'content-language', 'passwordfield', 'frame', 'x-xss-protection'}
+MAX_ITEMS = 40
+
+
+def _records(text):
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = []
+        for line in text.splitlines():
+            line = line.strip().rstrip(',').lstrip('[').rstrip(']').strip()
+            if line.startswith('{'):
+                data.append(json.loads(line))
+        if not data:
+            raise
+    return data if isinstance(data, list) else [data]
+
+
+def parse_json(text, private=False):
+    out, seen = [], set()
+    records = _records(text)
+    if not records or any(not isinstance(rec, dict) or not isinstance(rec.get('plugins'), dict)
+                          for rec in records):
+        raise ValueError('No complete WhatWeb plugin records.')
+    for rec in records:
+        for name, info in rec['plugins'].items():
+            if name.lower() in NOISE or name in seen or not isinstance(info, dict):
+                continue
+            seen.add(name)
+            bits = []
+            for key in ('version', 'string', 'os', 'module'):
+                vals = info.get(key)
+                if isinstance(vals, list):
+                    bits += [runner.clean(v, 60).rstrip(',') for v in vals[:3]]
+            detail = ', '.join(b for b in bits if b)
+            has_version = bool(info.get('version'))
+            out.append(Finding('WHATWEB_' + runner.clean(name, 40).replace(' ', '_'), 'info',
+                               'Technology identified: ' + runner.clean(name, 40) + (' ' + runner.clean(', '.join(map(str, info['version'][:2])), 40).rstrip(',') if has_version else ''),
+                               f'The site reveals {runner.clean(name, 40)}' + (f' ({detail})' if detail else '') + '.',
+                               'Keep this software updated. Hiding exact version numbers (for example ServerTokens, expose_php=Off) makes it harder for attackers to pick known exploits, but it is not a substitute for patching.'))
+    return out[:MAX_ITEMS], {'technologies': len(out)}, ('Only the first 40 findings are retained.' if len(out) > MAX_ITEMS else '')
+
+
+def build(binary, target, profile, outfile):
+    command = [binary]
+    if binary == str(NATIVE_TOOLS / 'ruby/bin/ruby.exe'):
+        command.append(str(NATIVE_TOOLS / 'launch-whatweb.rb'))
+    return [*command, '--no-errors', '--color=never', '--follow-redirect=never',
+            '--max-threads=1', '--log-json=' + outfile, *PROFILES[profile].args, target.url]
+
+
+SPEC = ToolSpec('whatweb', 'WhatWeb technology fingerprint', 'Shows which web server, framework and CMS a site advertises, and their versions.', 'web',
+                ('whatweb',), INSTALL_HINT, PROFILES, build, parse_json, outfile='.json', schemes=('http', 'https'),
+                note='Identifies technologies only; it does not test for vulnerabilities.')
