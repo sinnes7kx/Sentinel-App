@@ -33,6 +33,11 @@ def engine(db_url):
 
 
 @pytest.fixture
-def session(engine) -> Session:
-    with sessionmaker(engine, expire_on_commit=False)() as s:
+def factory(engine) -> sessionmaker[Session]:
+    return sessionmaker(engine, expire_on_commit=False)
+
+
+@pytest.fixture
+def session(factory) -> Session:
+    with factory() as s:
         yield s

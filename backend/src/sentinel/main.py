@@ -14,8 +14,10 @@ from . import __version__
 from .api import api_router
 from .config import get_settings
 from .db.migrate import upgrade_to_head
-from .db.session import dispose_engine, init_engine
+from .db.session import dispose_engine, init_engine, session_factory
 from .security import SessionTokenMiddleware
+from .services.jobs import JobManager
+from .services.recovery import RecoveryService
 
 
 @asynccontextmanager
@@ -27,9 +29,21 @@ async def lifespan(app: FastAPI):
     # Bring the schema to head before serving any request.
     upgrade_to_head(settings.db_url)
     init_engine(settings.db_url)
+    factory = session_factory()
+
+    # Crash recovery first: surface interrupted restores and jobs before any
+    # new work can start (ROADMAP §11).
+    recovery = RecoveryService(factory)
+    recovery.reconcile_after_crash()
+    jobs = JobManager(factory, workers=1)
+    await jobs.start()
+
+    app.state.recovery = recovery
+    app.state.jobs = jobs
     try:
         yield
     finally:
+        await jobs.stop()
         dispose_engine()
 
 

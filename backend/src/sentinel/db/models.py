@@ -15,7 +15,6 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
-    DateTime,
     Enum,
     ForeignKey,
     Index,
@@ -25,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, utcnow
+from .base import Base, UTCDateTime, utcnow
 
 
 # --------------------------------------------------------------------------
@@ -126,7 +125,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-_TS = DateTime(timezone=True)
+_TS = UTCDateTime()
 
 
 # --------------------------------------------------------------------------

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy import DateTime, MetaData, create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.types import TypeDecorator
 
 # Deterministic constraint names keep Alembic migrations stable across machines.
 NAMING_CONVENTION = {
@@ -23,6 +24,31 @@ class Base(DeclarativeBase):
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class UTCDateTime(TypeDecorator):
+    """Timezone-safe timestamp column for SQLite.
+
+    SQLite stores no offset, so an aware non-UTC value would silently be read
+    back as the wrong instant — fatal for engagement authorization windows.
+    Values are normalised to UTC on write, naive values are refused, and reads
+    always return aware UTC datetimes.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("Naive datetime refused; supply a timezone-aware value.")
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def make_engine(url: str) -> Engine:

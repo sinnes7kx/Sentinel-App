@@ -134,6 +134,34 @@ def test_audit_log_is_append_only(session):
     assert session.execute(text("SELECT action FROM audit_events")).scalar() == "engagement.created"
 
 
+def test_timestamps_round_trip_as_utc_instants(session):
+    from datetime import UTC, datetime, timedelta, timezone
+
+    cest = timezone(timedelta(hours=2))
+    start = datetime(2026, 6, 1, 9, 0, tzinfo=cest)  # 07:00 UTC
+    project = Project(name="tz")
+    eng = Engagement(project=project, name="e", starts_at=start)
+    session.add(project)
+    session.commit()
+    session.expire_all()
+
+    loaded = session.get(Engagement, eng.id).starts_at
+    assert loaded == start  # same instant
+    assert loaded.tzinfo is UTC and loaded.hour == 7
+
+
+def test_naive_timestamps_refused(session):
+    from datetime import datetime
+
+    from sqlalchemy.exc import StatementError
+
+    project = Project(name="naive")
+    session.add(Engagement(project=project, name="e", starts_at=datetime(2026, 6, 1, 9, 0)))
+    with pytest.raises(StatementError, match="Naive datetime"):
+        session.commit()
+    session.rollback()
+
+
 def test_engagement_with_recovery_journal_cannot_be_deleted(session):
     _, engagement, _ = _project_with_assessment(session)
     session.add(
