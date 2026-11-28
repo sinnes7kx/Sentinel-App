@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__
 from .api import api_router
@@ -55,14 +56,20 @@ def create_app() -> FastAPI:
         summary="Authorized security assessment platform — local API",
         lifespan=lifespan,
     )
-    app.add_middleware(SessionTokenMiddleware, token=settings.session_token())
+    token = settings.session_token()
+    app.state.session_token = token  # read by the WebSocket endpoint
+
+    # Middleware runs outermost-last-added: Host filter -> CORS -> token gate.
+    # CORS must sit outside the token gate so it can answer preflights.
+    app.add_middleware(SessionTokenMiddleware, token=token)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.dev_origins),
         allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "X-Sentinel-Token"],
     )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
     app.include_router(api_router)
     return app
 

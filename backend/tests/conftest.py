@@ -32,6 +32,26 @@ def engine(db_url):
     eng.dispose()
 
 
+@pytest.fixture(scope="module")
+def client():
+    """The real application, lifespan included, addressed as 127.0.0.1 so the
+    Host-header filter treats it like the desktop shell would."""
+    from fastapi.testclient import TestClient
+
+    from sentinel.main import app
+
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        yield c
+
+
+@pytest.fixture(scope="module")
+def auth(client) -> dict[str, str]:
+    from sentinel.config import get_settings
+    from sentinel.security import TOKEN_HEADER
+
+    return {TOKEN_HEADER: get_settings().session_token()}
+
+
 @pytest.fixture
 def factory(engine) -> sessionmaker[Session]:
     return sessionmaker(engine, expire_on_commit=False)

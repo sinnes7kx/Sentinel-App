@@ -34,6 +34,22 @@ class Settings(BaseSettings):
     # Cross-origin dev origins allowed to call the API (the Vite dev server).
     dev_origins: tuple[str, ...] = ("http://127.0.0.1:5173", "http://localhost:5173")
 
+    # Host headers accepted by the API. Anything else (e.g. an attacker's
+    # domain rebound to 127.0.0.1) is rejected before routing.
+    allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost")
+
+    @property
+    def allowed_ws_origins(self) -> frozenset[str]:
+        """Browser origins permitted to open the event WebSocket. WebSockets
+        are not covered by CORS, so the Origin header is checked explicitly."""
+        return frozenset(
+            {
+                *self.dev_origins,
+                f"http://127.0.0.1:{self.port}",
+                f"http://localhost:{self.port}",
+            }
+        )
+
     @property
     def db_path(self) -> Path:
         # Distinct from the legacy Tkinter app's ``sentinel.sqlite3`` in the same
