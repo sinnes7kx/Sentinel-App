@@ -36,6 +36,12 @@ class Settings(BaseSettings):
 
     @property
     def db_path(self) -> Path:
+        # Distinct from the legacy Tkinter app's ``sentinel.sqlite3`` in the same
+        # directory: that file is never migrated in place, only imported read-only.
+        return self.data_dir / "sentinel_platform.sqlite3"
+
+    @property
+    def legacy_db_path(self) -> Path:
         return self.data_dir / "sentinel.sqlite3"
 
     @property

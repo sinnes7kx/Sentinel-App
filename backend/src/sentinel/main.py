@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__
 from .api import api_router
 from .config import get_settings
+from .db.migrate import upgrade_to_head
+from .db.session import dispose_engine, init_engine
 from .security import SessionTokenMiddleware
 
 
@@ -22,7 +24,13 @@ async def lifespan(app: FastAPI):
     settings.ensure_data_dir()
     # Materialize the session token on startup so the dev proxy can read it.
     settings.session_token()
-    yield
+    # Bring the schema to head before serving any request.
+    upgrade_to_head(settings.db_url)
+    init_engine(settings.db_url)
+    try:
+        yield
+    finally:
+        dispose_engine()
 
 
 def create_app() -> FastAPI:
